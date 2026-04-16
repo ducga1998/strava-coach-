@@ -1,0 +1,147 @@
+import axios, {
+  AxiosError,
+  type AxiosInstance,
+  type AxiosResponse,
+} from "axios"
+import type {
+  ActivityDetailResponse,
+  ActivityListItem,
+  DashboardLoadResponse,
+  OnboardingProfilePayload,
+  RaceTarget,
+  RaceTargetPayload,
+  RaceTargetUpdatePayload,
+} from "../types"
+
+const ATHLETE_ID_STORAGE_KEY = "strava-coach-athlete-id"
+
+export const api: AxiosInstance = axios.create({
+  baseURL: getApiBaseUrl(),
+  withCredentials: true,
+  headers: {
+    Accept: "application/json",
+  },
+})
+
+export class ApiClientError extends Error {
+  readonly status?: number
+
+  constructor(message: string, status?: number) {
+    super(message)
+    this.name = "ApiClientError"
+    this.status = status
+  }
+}
+
+export function getApiBaseUrl(): string {
+  return import.meta.env.VITE_API_URL ?? "http://localhost:8000"
+}
+
+export function getStoredAthleteId(): number | null {
+  if (typeof window === "undefined") return null
+  const queryId = parseAthleteId(new URLSearchParams(window.location.search))
+  if (queryId !== null) return persistAthleteId(queryId)
+  return parsePositiveNumber(window.localStorage.getItem(ATHLETE_ID_STORAGE_KEY))
+}
+
+export function persistAthleteId(athleteId: number): number {
+  window.localStorage.setItem(ATHLETE_ID_STORAGE_KEY, String(athleteId))
+  return athleteId
+}
+
+export function requireAthleteId(athleteId: number | null): number {
+  if (athleteId === null) {
+    throw new ApiClientError("Athlete id is required before calling this API")
+  }
+  return athleteId
+}
+
+export async function getDashboardLoad(
+  athleteId: number,
+): Promise<DashboardLoadResponse> {
+  return request(api.get(`/dashboard/load?athlete_id=${athleteId}`))
+}
+
+export async function listActivities(
+  athleteId: number,
+): Promise<ActivityListItem[]> {
+  return request(api.get(`/activities/?athlete_id=${athleteId}`))
+}
+
+export async function getActivityDetail(
+  activityId: number,
+): Promise<ActivityDetailResponse> {
+  return request(api.get(`/activities/${activityId}`))
+}
+
+export async function saveOnboardingProfile(
+  payload: OnboardingProfilePayload,
+): Promise<void> {
+  await request(api.post("/onboarding/profile", payload))
+}
+
+export async function listRaceTargets(
+  athleteId: number,
+): Promise<RaceTarget[]> {
+  return request(api.get(`/targets/?athlete_id=${athleteId}`))
+}
+
+export async function createRaceTarget(
+  payload: RaceTargetPayload,
+): Promise<RaceTarget> {
+  return request(api.post("/targets", payload))
+}
+
+export async function updateRaceTarget(params: {
+  id: number
+  payload: RaceTargetUpdatePayload
+}): Promise<RaceTarget> {
+  return request(api.put(`/targets/${params.id}`, params.payload))
+}
+
+export async function deleteRaceTarget(params: {
+  id: number
+  athleteId: number
+}): Promise<void> {
+  await request(api.delete(`/targets/${params.id}?athlete_id=${params.athleteId}`))
+}
+
+async function request<T>(promise: Promise<AxiosResponse<T>>): Promise<T> {
+  try {
+    const response = await promise
+    return response.data
+  } catch (error: unknown) {
+    throw normalizeApiError(error)
+  }
+}
+
+function parseAthleteId(params: URLSearchParams): number | null {
+  return parsePositiveNumber(params.get("athlete_id"))
+}
+
+function parsePositiveNumber(value: string | null): number | null {
+  if (value === null || value.trim() === "") return null
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function normalizeApiError(error: unknown): ApiClientError {
+  if (!axios.isAxiosError(error)) return new ApiClientError("Unexpected error")
+  return fromAxiosError(error)
+}
+
+function fromAxiosError(error: AxiosError<unknown>): ApiClientError {
+  const status = error.response?.status
+  const message = getErrorMessage(error.response?.data) ?? error.message
+  return new ApiClientError(message, status)
+}
+
+function getErrorMessage(data: unknown): string | null {
+  if (!isRecord(data)) return null
+  const detail = data.detail ?? data.message
+  return typeof detail === "string" ? detail : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
