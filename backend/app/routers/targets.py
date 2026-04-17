@@ -15,7 +15,7 @@ class TargetIn(BaseModel):
     athlete_id: int = Field(gt=0)
     race_name: str = Field(min_length=1, max_length=255)
     race_date: date
-    distance_km: float = Field(gt=0)
+    distance_km: float | None = Field(default=None, gt=0)
     elevation_gain_m: float | None = Field(default=None, ge=0)
     goal_time_sec: int | None = Field(default=None, gt=0)
     priority: Priority = Priority.A
@@ -47,7 +47,15 @@ class TargetOut(BaseModel):
 async def create_target(
     data: TargetIn, db: AsyncSession = Depends(get_db)
 ) -> TargetOut:
-    target = RaceTarget(**data.model_dump())
+    target = RaceTarget(
+        athlete_id=data.athlete_id,
+        race_name=data.race_name,
+        race_date=data.race_date,
+        distance_km=known_distance_km(data.distance_km),
+        elevation_gain_m=data.elevation_gain_m,
+        goal_time_sec=data.goal_time_sec,
+        priority=data.priority,
+    )
     db.add(target)
     await db.commit()
     await db.refresh(target)
@@ -108,9 +116,24 @@ async def get_target_or_404(
 
 
 def apply_target_update(target: RaceTarget, data: TargetUpdateIn) -> None:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        if field != "athlete_id":
-            setattr(target, field, value)
+    if data.race_name is not None:
+        target.race_name = data.race_name
+    if data.race_date is not None:
+        target.race_date = data.race_date
+    if "distance_km" in data.model_fields_set:
+        target.distance_km = known_distance_km(data.distance_km)
+    if "elevation_gain_m" in data.model_fields_set:
+        target.elevation_gain_m = data.elevation_gain_m
+    if "goal_time_sec" in data.model_fields_set:
+        target.goal_time_sec = data.goal_time_sec
+    if data.priority is not None:
+        target.priority = data.priority
+
+
+def known_distance_km(distance_km: float | None) -> float:
+    if distance_km is None:
+        return 0.0
+    return distance_km
 
 
 def target_out(target: RaceTarget) -> TargetOut:

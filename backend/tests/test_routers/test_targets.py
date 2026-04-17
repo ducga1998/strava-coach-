@@ -29,3 +29,27 @@ def test_create_and_list_target(
     assert listed.status_code == 200
     ids = [target["id"] for target in listed.json()]
     assert target_id in ids
+
+
+def test_create_target_accepts_unknown_distance(
+    client: TestClient, db_session: AsyncSession
+) -> None:
+    db_session.add(Athlete(id=2, strava_athlete_id=1002))
+    asyncio.run(db_session.commit())
+
+    response = client.post(
+        "/targets",
+        json={
+            "athlete_id": 2,
+            "race_name": "VMM 160m",
+            "race_date": "2026-09-19",
+            "distance_km": None,
+            "elevation_gain_m": 8900,
+            "priority": "A",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["distance_km"] == 0.0
+    assert body["elevation_gain_m"] == 8900

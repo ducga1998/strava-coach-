@@ -69,10 +69,9 @@ class StravaPayloadError(ValueError):
 
 
 def get_authorization_url(state: str) -> str:
-    callback_url = settings.strava_webhook_callback_url.replace("/webhook/strava", "")
     params = {
         "client_id": settings.strava_client_id,
-        "redirect_uri": f"{callback_url}/auth/callback",
+        "redirect_uri": settings.strava_auth_callback_url,
         "response_type": "code",
         "approval_prompt": "auto",
         "scope": "read,activity:read_all,profile:read_all",
