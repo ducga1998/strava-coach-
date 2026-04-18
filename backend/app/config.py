@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     cors_origins: str = ""
     enable_llm_debriefs: bool = False
+    strava_push_description: bool = False
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
