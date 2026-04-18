@@ -1,4 +1,5 @@
 import logging
+from typing import TypedDict
 
 import httpx
 
@@ -6,6 +7,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 STRAVA_SUBSCRIPTIONS_URL = "https://www.strava.com/api/v3/push_subscriptions"
+
+
+class StravaSubscription(TypedDict):
+    id: int
+    callback_url: str
 
 
 async def ensure_webhook_subscription() -> None:
@@ -33,7 +39,12 @@ async def ensure_webhook_subscription() -> None:
 
 
 def _is_test_config() -> bool:
-    return settings.strava_client_id in ("", "test-client-id")
+    test_values = {"", "test-client-id", "test-client-secret", "test-verify-token"}
+    return (
+        settings.strava_client_id in test_values
+        or settings.strava_client_secret in test_values
+        or settings.strava_verify_token in test_values
+    )
 
 
 def _is_local_callback() -> bool:
@@ -41,7 +52,7 @@ def _is_local_callback() -> bool:
     return "localhost" in url or "127.0.0.1" in url
 
 
-async def _get_existing(client: httpx.AsyncClient) -> dict | None:
+async def _get_existing(client: httpx.AsyncClient) -> StravaSubscription | None:
     response = await client.get(
         STRAVA_SUBSCRIPTIONS_URL,
         params={
@@ -49,8 +60,8 @@ async def _get_existing(client: httpx.AsyncClient) -> dict | None:
             "client_secret": settings.strava_client_secret,
         },
     )
-    subs = response.json()
-    return subs[0] if isinstance(subs, list) and subs else None
+    response.raise_for_status()
+    return _parse_subscription(response.json())
 
 
 async def _register(client: httpx.AsyncClient) -> None:
@@ -64,8 +75,12 @@ async def _register(client: httpx.AsyncClient) -> None:
         },
     )
     if response.status_code == 201:
-        sub = response.json()
-        logger.info("Strava webhook registered: id=%s callback=%s", sub["id"], sub["callback_url"])
+        sub = _parse_created_subscription(response.json())
+        logger.info(
+            "Strava webhook registered: id=%s callback=%s",
+            sub["id"],
+            sub["callback_url"],
+        )
     else:
         logger.warning(
             "Strava webhook registration returned %s: %s",
@@ -75,11 +90,36 @@ async def _register(client: httpx.AsyncClient) -> None:
 
 
 async def _delete(client: httpx.AsyncClient, sub_id: int) -> None:
-    await client.delete(
+    response = await client.delete(
         f"{STRAVA_SUBSCRIPTIONS_URL}/{sub_id}",
         params={
             "client_id": settings.strava_client_id,
             "client_secret": settings.strava_client_secret,
         },
     )
+    response.raise_for_status()
     logger.info("deleted stale Strava webhook subscription: id=%s", sub_id)
+
+
+def _parse_subscription(payload: object) -> StravaSubscription | None:
+    if not isinstance(payload, list) or not payload:
+        return None
+    first = payload[0]
+    if not isinstance(first, dict):
+        return None
+    sub_id = first.get("id")
+    callback_url = first.get("callback_url")
+    if not isinstance(sub_id, int) or not isinstance(callback_url, str):
+        return None
+    return {"id": sub_id, "callback_url": callback_url}
+
+
+def _parse_created_subscription(payload: object) -> StravaSubscription:
+    if not isinstance(payload, dict):
+        return {"id": 0, "callback_url": settings.strava_webhook_callback_url}
+    sub_id = payload.get("id")
+    callback_url = payload.get("callback_url", settings.strava_webhook_callback_url)
+    return {
+        "id": sub_id if isinstance(sub_id, int) else 0,
+        "callback_url": callback_url if isinstance(callback_url, str) else "",
+    }

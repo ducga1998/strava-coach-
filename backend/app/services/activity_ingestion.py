@@ -378,8 +378,71 @@ def _build_activity(
 
 
 async def _persist_activity(session: AsyncSession, activity: Activity) -> None:
+    existing = await _find_activity(session, activity.strava_activity_id)
+    if existing is not None:
+        await _delete_metrics(session, existing.id)
+        _copy_activity_fields(existing, activity)
+        await session.flush()
+        return
     session.add(activity)
     await session.flush()
+
+
+async def delete_activity(session: AsyncSession, strava_activity_id: int) -> None:
+    activity = await _find_activity(session, strava_activity_id)
+    if activity is None:
+        return
+    await session.delete(activity)
+    await session.commit()
+
+
+async def mark_athlete_deauthorized(
+    session: AsyncSession, strava_athlete_id: int
+) -> None:
+    result = await session.execute(
+        select(StravaCredential)
+        .join(Athlete, Athlete.id == StravaCredential.athlete_id)
+        .where(Athlete.strava_athlete_id == strava_athlete_id)
+    )
+    credential = result.scalar_one_or_none()
+    if credential is None:
+        return
+    credential.source_disconnected = True
+    await session.commit()
+
+
+async def _find_activity(
+    session: AsyncSession, strava_activity_id: int
+) -> Activity | None:
+    result = await session.execute(
+        select(Activity).where(Activity.strava_activity_id == strava_activity_id)
+    )
+    return result.scalar_one_or_none()
+
+
+def _copy_activity_fields(target: Activity, source: Activity) -> None:
+    target.athlete_id = source.athlete_id
+    target.name = source.name
+    target.sport_type = source.sport_type
+    target.start_date = source.start_date
+    target.elapsed_time_sec = source.elapsed_time_sec
+    target.moving_time_sec = source.moving_time_sec
+    target.distance_m = source.distance_m
+    target.total_elevation_gain_m = source.total_elevation_gain_m
+    target.average_heartrate = source.average_heartrate
+    target.max_heartrate = source.max_heartrate
+    target.streams_raw = source.streams_raw
+    if source.processing_status is not None:
+        target.processing_status = source.processing_status
+
+
+async def _delete_metrics(session: AsyncSession, activity_id: int) -> None:
+    result = await session.execute(
+        select(ActivityMetrics).where(ActivityMetrics.activity_id == activity_id)
+    )
+    metrics = result.scalar_one_or_none()
+    if metrics is not None:
+        await session.delete(metrics)
 
 
 async def _find_athlete(session: AsyncSession, strava_athlete_id: int) -> Athlete | None:

@@ -2,7 +2,13 @@ import asyncio
 import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.services.activity_ingestion import _push_description
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.activity import Activity
+from app.models.athlete import Athlete
+from app.models.metrics import ActivityMetrics
+from app.services.activity_ingestion import _persist_activity, _push_description
 
 
 def _mock_activity(debrief: dict | None = None, *, strava_id: int = 12345) -> MagicMock:
@@ -96,5 +102,66 @@ def test_push_description_swallows_http_error() -> None:
             s.frontend_url = "http://localhost:5173"
             await _push_description(session, activity, mock_client, "tok")  # must not raise
         mock_client.update_activity_description.assert_called_once()
+
+    asyncio.run(run())
+
+
+def test_persist_activity_updates_existing_strava_activity(
+    db_session: AsyncSession,
+) -> None:
+    async def run() -> None:
+        db_session.add(Athlete(id=1, strava_athlete_id=1001))
+        db_session.add(
+            Activity(
+                athlete_id=1,
+                strava_activity_id=12345,
+                name="Old title",
+                sport_type="Run",
+            )
+        )
+        await db_session.commit()
+
+        await _persist_activity(
+            db_session,
+            Activity(
+                athlete_id=1,
+                strava_activity_id=12345,
+                name="New title",
+                sport_type="TrailRun",
+            ),
+        )
+        await db_session.commit()
+
+        result = await db_session.execute(
+            select(Activity).where(Activity.strava_activity_id == 12345)
+        )
+        activities = result.scalars().all()
+        assert len(activities) == 1
+        assert activities[0].name == "New title"
+        assert activities[0].sport_type == "TrailRun"
+
+    asyncio.run(run())
+
+
+def test_persist_activity_clears_existing_metrics_for_recompute(
+    db_session: AsyncSession,
+) -> None:
+    async def run() -> None:
+        db_session.add(Athlete(id=1, strava_athlete_id=1001))
+        activity = Activity(id=1, athlete_id=1, strava_activity_id=12345)
+        db_session.add(activity)
+        db_session.add(ActivityMetrics(activity_id=1, athlete_id=1, tss=20.0))
+        await db_session.commit()
+
+        await _persist_activity(
+            db_session,
+            Activity(athlete_id=1, strava_activity_id=12345, name="Recomputed"),
+        )
+        await db_session.commit()
+
+        metrics = await db_session.scalar(
+            select(ActivityMetrics).where(ActivityMetrics.activity_id == 1)
+        )
+        assert metrics is None
 
     asyncio.run(run())
