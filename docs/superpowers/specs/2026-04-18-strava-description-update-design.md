@@ -33,11 +33,28 @@ Assembled entirely in Python from computed metrics. No LLM is called to produce 
 | Line 3 | `DebriefOutput.next_session_action` — the only LLM output in the compact block |
 | Line 4 | `settings.frontend_url` + activity DB id + athlete id |
 
-**`next_session_action` rules (enforced in LLM prompt):**
+**`next_session_action` rules (enforced in LLM system prompt):**
 - Max 120 characters
-- Lead with race name + weeks out if target is set: `"VMM 8w: 90 min trail, 1000m D+"`
+- Lead with race name + weeks out if target is set: `"VMM 8w: 90' Trail, downhill tech >15% slope"`
 - Zero filler words ("great job", "it seems like", "listen to your body")
 - One concrete instruction + one metric or terrain cue
+
+**VMM / ultra-trail prompt directive (injected when `race_target` is set):**
+
+When `race_target.race_name` contains "VMM" or `race_target.distance_km >= 80`, add this directive to the system prompt:
+
+> "Prioritise climbing (D+) and technical descent (D-) cues. VMM and ultra-trail races destroy quads on downhill — always include a descent-specific element when TSB > -10 and training_phase is Build or Peak. Prefer gradient targets (>15% slope) over vague terrain labels."
+
+This shifts the LLM output from:
+```
+→ Trail 90 min Z2, keep effort easy          ← generic
+```
+to:
+```
+→ VMM 8w: 90' Trail, downhill tech >15%, quad-load descents    ← race-specific
+```
+
+**Gradient for other A-races:** if `race_target` is set but is not VMM/ultra, the directive is omitted and the LLM uses standard trail coaching cues.
 
 ---
 
