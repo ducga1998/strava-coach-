@@ -75,7 +75,7 @@ def test_push_description_calls_client_with_formatted_text() -> None:
             s.frontend_url = "http://localhost:5173"
             await _push_description(session, activity, mock_client, "tok")
         mock_client.update_activity_description.assert_called_once()
-        _, _, _, description = mock_client.update_activity_description.call_args[0]
+        _, _, description = mock_client.update_activity_description.call_args[0]
         assert "TSS 72" in description
         assert "VMM 8w: easy trail" in description
         assert "http://localhost:5173/activities/1" in description

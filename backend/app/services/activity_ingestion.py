@@ -184,7 +184,7 @@ async def _push_description(
     )
     try:
         await client.update_activity_description(
-            access_token, activity.athlete_id, activity.strava_activity_id, description
+            access_token, activity.strava_activity_id, description
         )
     except Exception:
         logger.warning(
