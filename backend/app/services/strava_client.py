@@ -104,7 +104,7 @@ def get_authorization_url(state: str) -> str:
         "redirect_uri": settings.strava_auth_callback_url,
         "response_type": "code",
         "approval_prompt": "auto",
-        "scope": "read,activity:read_all,profile:read_all",
+        "scope": "read,activity:read_all,activity:write,profile:read_all",
         "state": state,
     }
     return f"{STRAVA_AUTH_URL}?{urlencode(params)}"
