@@ -1,6 +1,12 @@
+import { InfoCircleOutlined } from "@ant-design/icons"
+import { Tooltip } from "antd"
+
 interface AcwrGaugeProps {
   acwr: number
 }
+
+const ACWR_HELP =
+  "Acute:Chronic Workload Ratio — this week’s load vs your usual baseline. About 0.8–1.3 is often sustainable; above 1.5 suggests injury risk if it stays there."
 
 const radius = 52
 const stroke = 12
@@ -13,7 +19,12 @@ export default function AcwrGauge({ acwr }: AcwrGaugeProps) {
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold uppercase text-slate-500">ACWR</h2>
+          <h2 className="flex items-center gap-1 text-sm font-semibold uppercase text-slate-500">
+            ACWR
+            <Tooltip title={ACWR_HELP} trigger={["hover", "click"]}>
+              <InfoCircleOutlined className="cursor-help text-[0.7rem] normal-case text-slate-400" />
+            </Tooltip>
+          </h2>
           <p className="mt-1 text-4xl font-bold text-slate-950">{acwr.toFixed(2)}</p>
           <p className={`mt-2 text-sm font-semibold ${zone.textClass}`}>{zone.label}</p>
         </div>

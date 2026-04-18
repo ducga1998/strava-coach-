@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { Typography, Alert, Button } from "antd"
 import {
+  getAthleteInfo,
   getDashboardLoad,
   getStoredAthleteId,
   listActivities,
@@ -11,7 +12,7 @@ import AcwrGauge from "../components/AcwrGauge"
 import LoadChart from "../components/LoadChart"
 import MetricBadge from "../components/MetricBadge"
 import PhaseIndicator from "../components/PhaseIndicator"
-import type { ActivityListItem, DashboardLoadResponse, LoadSnapshot } from "../types"
+import type { ActivityListItem, AthleteInfo, DashboardLoadResponse, LoadSnapshot } from "../types"
 
 const emptyLoad: DashboardLoadResponse = {
   training_phase: "Base",
@@ -23,13 +24,15 @@ export default function Dashboard() {
   const athleteId = getStoredAthleteId()
   const loadQuery = useLoadQuery(athleteId)
   const activitiesQuery = useActivitiesQuery(athleteId)
+  const athleteQuery = useAthleteQuery(athleteId)
   if (athleteId === null) return <MissingAthleteState />
   if (loadQuery.isPending) return <StatusPage message="Loading training load..." />
   if (loadQuery.isError) return <StatusPage message={loadQuery.error.message} />
 
   const load = loadQuery.data ?? emptyLoad
   const activities = activitiesQuery.data ?? []
-  return <DashboardView activities={activities} athleteId={athleteId} load={load} />
+  const athlete = athleteQuery.data ?? null
+  return <DashboardView activities={activities} athlete={athlete} athleteId={athleteId} load={load} />
 }
 
 function useLoadQuery(athleteId: number | null) {
@@ -48,8 +51,17 @@ function useActivitiesQuery(athleteId: number | null) {
   })
 }
 
+function useAthleteQuery(athleteId: number | null) {
+  return useQuery({
+    queryKey: ["athlete", athleteId],
+    queryFn: () => getAthleteInfo(requireAthleteId(athleteId)),
+    enabled: athleteId !== null,
+  })
+}
+
 function DashboardView(props: {
   activities: ActivityListItem[]
+  athlete: AthleteInfo | null
   athleteId: number
   load: DashboardLoadResponse
 }) {
@@ -57,9 +69,10 @@ function DashboardView(props: {
   return (
     <main className="min-h-screen bg-trail-surface px-4 py-6 text-trail-ink">
       <div className="mx-auto max-w-6xl space-y-6">
-        <DashboardHeader load={props.load} />
+        <DashboardHeader athlete={props.athlete} load={props.load} />
         {isRiskZone(latest) ? <RiskBanner latest={latest} /> : null}
         {props.load.history.length < 14 ? <BaseliningBanner count={props.load.history.length} /> : null}
+        {props.athlete ? <AthleteCard athlete={props.athlete} /> : null}
         <MetricGrid load={props.load} />
         <section className="grid gap-6 xl:grid-cols-[1fr_320px]">
           <LoadChart data={props.load.history} />
@@ -71,12 +84,34 @@ function DashboardView(props: {
   )
 }
 
-function DashboardHeader({ load }: { load: DashboardLoadResponse }) {
+function DashboardHeader({ athlete, load }: { athlete: AthleteInfo | null; load: DashboardLoadResponse }) {
+  const name = athlete ? [athlete.firstname, athlete.lastname].filter(Boolean).join(" ") : null
   return (
     <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-      <div>
-        <Typography.Text className="font-semibold uppercase text-trail-strava">Dashboard</Typography.Text>
-        <Typography.Title level={1} className="!mt-1 !mb-0 !text-3xl font-bold text-slate-950">Training load</Typography.Title>
+      <div className="flex items-center gap-4">
+        {athlete?.avatar_url ? (
+          <img
+            src={athlete.avatar_url}
+            alt={name ?? "Athlete"}
+            className="h-14 w-14 rounded-full border-2 border-white object-cover shadow-sm"
+          />
+        ) : (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-200 text-xl font-bold text-slate-500 shadow-sm">
+            {name ? name[0].toUpperCase() : "?"}
+          </div>
+        )}
+        <div>
+          {name ? (
+            <Typography.Title level={1} className="!mt-0 !mb-0 !text-2xl font-bold text-slate-950">
+              {name}
+            </Typography.Title>
+          ) : null}
+          {athlete?.city || athlete?.country ? (
+            <Typography.Text className="text-sm text-slate-500">
+              {[athlete.city, athlete.country].filter(Boolean).join(", ")}
+            </Typography.Text>
+          ) : null}
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <PhaseIndicator phase={load.training_phase} targetDate={load.target?.race_date} />
@@ -90,14 +125,63 @@ function DashboardHeader({ load }: { load: DashboardLoadResponse }) {
   )
 }
 
+function AthleteCard({ athlete }: { athlete: AthleteInfo }) {
+  const p = athlete.profile
+  if (!p || (!p.lthr && !p.threshold_pace_sec_km && !p.vo2max_estimate && !p.weight_kg)) return null
+  return (
+    <section className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-panel md:grid-cols-4">
+      <ProfileStat label="LTHR" value={p.lthr ? `${p.lthr} bpm` : null} hint="Lactate threshold HR" />
+      <ProfileStat label="Threshold pace" value={p.threshold_pace_sec_km ? formatPace(p.threshold_pace_sec_km) : null} hint="min/km at LT" />
+      <ProfileStat label="VO₂max" value={p.vo2max_estimate ? `${p.vo2max_estimate.toFixed(1)} ml/kg/min` : null} hint="Aerobic capacity estimate" />
+      <ProfileStat label="Weight" value={p.weight_kg ? `${p.weight_kg.toFixed(1)} kg` : null} hint="Body mass" />
+    </section>
+  )
+}
+
+function ProfileStat({ label, value, hint }: { label: string; value: string | null; hint: string }) {
+  if (!value) return null
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase text-slate-400">{label}</p>
+      <p className="mt-1 text-lg font-bold text-slate-950">{value}</p>
+      <p className="text-xs text-slate-400">{hint}</p>
+    </div>
+  )
+}
+
+function formatPace(secPerKm: number): string {
+  const min = Math.floor(secPerKm / 60)
+  const sec = secPerKm % 60
+  return `${min}:${String(sec).padStart(2, "0")} /km`
+}
+
+const METRIC_HELP = {
+  ctl: "Chronic Training Load — your rolling fitness from the last several weeks. It rises when you train consistently and falls after long breaks.",
+  atl: "Acute Training Load — fatigue from about the last week. It jumps after hard blocks and should ease after easier days.",
+  tsb: "Training Stress Balance (form) — CTL minus ATL. Negative means tired; very positive means fresh. Many athletes aim near +5 to +15 on race day.",
+  weeklyVolume: "Rolling 7-day distance and climb from synced activities. Use it to see if your week matches the plan, not to compare to other runners.",
+} as const
+
 function MetricGrid({ load }: { load: DashboardLoadResponse }) {
   const volume = load.weekly_volume
   return (
     <section className="grid gap-4 md:grid-cols-4">
-      <MetricBadge label="CTL" value={load.latest.ctl.toFixed(1)} caption="Fitness" tone="blue" />
-      <MetricBadge label="ATL" value={load.latest.atl.toFixed(1)} caption="Fatigue" tone="amber" />
-      <MetricBadge label="TSB" value={load.latest.tsb.toFixed(1)} caption="Form" tone={load.latest.tsb < -30 ? "red" : "emerald"} />
-      <MetricBadge label="Weekly volume" value={formatVolume(volume)} caption={formatElevation(volume)} tone="violet" />
+      <MetricBadge label="CTL" value={load.latest.ctl.toFixed(1)} caption="Fitness" help={METRIC_HELP.ctl} tone="blue" />
+      <MetricBadge label="ATL" value={load.latest.atl.toFixed(1)} caption="Fatigue" help={METRIC_HELP.atl} tone="amber" />
+      <MetricBadge
+        label="TSB"
+        value={load.latest.tsb.toFixed(1)}
+        caption="Form"
+        help={METRIC_HELP.tsb}
+        tone={load.latest.tsb < -30 ? "red" : "emerald"}
+      />
+      <MetricBadge
+        label="Weekly volume"
+        value={formatVolume(volume)}
+        caption={formatElevation(volume)}
+        help={METRIC_HELP.weeklyVolume}
+        tone="violet"
+      />
     </section>
   )
 }

@@ -1,6 +1,7 @@
+import logging
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,9 +10,16 @@ from app.config import settings
 from app.database import get_db
 from app.models.athlete import Athlete
 from app.models.credentials import StravaCredential
-from app.services.strava_client import exchange_code, get_authorization_url
-from app.services.strava_client import StravaTokenPayload
-from app.services.token_service import encrypt
+from app.services.strava_client import (
+    StravaOAuthError,
+    StravaPayloadError,
+    StravaTokenPayload,
+    exchange_code,
+    get_authorization_url,
+)
+from app.services.token_service import TokenServiceError, encrypt
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 _state_store: set[str] = set()
@@ -30,18 +38,43 @@ async def strava_callback(
     state: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
-    validate_state(state)
-    token_data = await exchange_code(code)
-    athlete = await upsert_athlete(db, token_data)
-    await upsert_credentials(db, athlete.id, token_data)
-    await db.commit()
-    return RedirectResponse(f"{settings.frontend_url}/setup?athlete_id={athlete.id}")
-
-
-def validate_state(state: str) -> None:
     if state not in _state_store:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+        return RedirectResponse(
+            f"{settings.frontend_url}/?oauth_error=invalid_state", status_code=302
+        )
     _state_store.remove(state)
+
+    try:
+        token_data = await exchange_code(code)
+        athlete = await upsert_athlete(db, token_data)
+        await upsert_credentials(db, athlete.id, token_data)
+        await db.commit()
+    except StravaOAuthError as exc:
+        await db.rollback()
+        logger.warning("Strava token exchange failed: %s", exc.message)
+        return RedirectResponse(
+            f"{settings.frontend_url}/?oauth_error=strava_token", status_code=302
+        )
+    except StravaPayloadError as exc:
+        await db.rollback()
+        logger.warning("Strava token payload invalid: %s", exc)
+        return RedirectResponse(
+            f"{settings.frontend_url}/?oauth_error=strava_payload", status_code=302
+        )
+    except TokenServiceError:
+        await db.rollback()
+        logger.exception("Encrypting Strava tokens failed — check ENCRYPTION_KEY")
+        return RedirectResponse(
+            f"{settings.frontend_url}/?oauth_error=encryption_config", status_code=302
+        )
+    except Exception:
+        await db.rollback()
+        logger.exception("OAuth callback failed")
+        return RedirectResponse(
+            f"{settings.frontend_url}/?oauth_error=server_error", status_code=302
+        )
+
+    return RedirectResponse(f"{settings.frontend_url}/setup?athlete_id={athlete.id}")
 
 
 async def upsert_athlete(
@@ -53,11 +86,19 @@ async def upsert_athlete(
     )
     athlete = result.scalar_one_or_none()
     if athlete is not None:
+        athlete.firstname = strava_athlete.get("firstname", athlete.firstname)
+        athlete.lastname = strava_athlete.get("lastname", athlete.lastname)
+        athlete.avatar_url = strava_athlete.get("profile", athlete.avatar_url)
+        athlete.city = strava_athlete.get("city", athlete.city)
+        athlete.country = strava_athlete.get("country", athlete.country)
         return athlete
     athlete = Athlete(
         strava_athlete_id=strava_athlete["id"],
         firstname=strava_athlete.get("firstname", ""),
         lastname=strava_athlete.get("lastname", ""),
+        avatar_url=strava_athlete.get("profile"),
+        city=strava_athlete.get("city"),
+        country=strava_athlete.get("country"),
     )
     db.add(athlete)
     await db.flush()

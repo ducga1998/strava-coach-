@@ -1,12 +1,22 @@
+from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import activities, auth, dashboard, onboarding, targets, webhook
+from app.routers import activities, athletes, auth, dashboard, onboarding, targets, webhook
+from app.services.webhook_subscription import ensure_webhook_subscription
+
+
+@asynccontextmanager
+async def lifespan(api: FastAPI) -> AsyncGenerator[None, None]:
+    await ensure_webhook_subscription()
+    yield
 
 
 def create_app() -> FastAPI:
-    api = FastAPI(title="Strava AI Coach API")
+    api = FastAPI(title="Strava AI Coach API", lifespan=lifespan)
     register_middleware(api)
     register_routes(api)
     return api
@@ -30,6 +40,7 @@ def register_routes(api: FastAPI) -> None:
     api.include_router(onboarding.router)
     api.include_router(targets.router)
     api.include_router(activities.router)
+    api.include_router(athletes.router)
     api.include_router(dashboard.router)
 
 

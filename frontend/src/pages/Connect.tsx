@@ -1,12 +1,34 @@
 import { type FormEvent, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
-import { Button, Input } from "antd"
-import { getApiBaseUrl, getStoredAthleteId, persistAthleteId } from "../api/client"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Alert, Button, Input } from "antd"
+import {
+  clearAthleteId,
+  getApiBaseUrl,
+  getStoredAthleteId,
+  persistAthleteId,
+} from "../api/client"
+
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  strava_token:
+    "Strava could not finish login. Check STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in backend .env, and that your Strava app’s Authorization Callback Domain matches this site (e.g. localhost). Then click Connect Strava again.",
+  strava_payload: "Strava returned an unexpected response. Try Connect Strava again.",
+  encryption_config:
+    "Server misconfiguration: ENCRYPTION_KEY must be a base64 string that decodes to exactly 32 bytes. Generate one and restart the API.",
+  server_error: "Something went wrong on the server while saving your login. Check the API terminal logs and try again.",
+  invalid_state: "Your login session expired (e.g. API restarted). Click Connect Strava again.",
+}
 
 export default function Connect() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [athleteId, setAthleteId] = useState(getInitialAthleteId)
   const [error, setError] = useState<string | null>(null)
+  const oauthErrorCode = searchParams.get("oauth_error")
+  const oauthMessage =
+    oauthErrorCode !== null
+      ? (OAUTH_ERROR_MESSAGES[oauthErrorCode] ?? OAUTH_ERROR_MESSAGES.server_error)
+      : null
+  const sessionAthleteId = getStoredAthleteId()
 
   function connectStrava() {
     window.location.assign(`${getApiBaseUrl()}/auth/strava`)
@@ -20,8 +42,55 @@ export default function Connect() {
     navigate(`/dashboard?athlete_id=${parsed}`)
   }
 
+  function dismissOauthError() {
+    const next = new URLSearchParams(searchParams)
+    next.delete("oauth_error")
+    setSearchParams(next, { replace: true })
+  }
+
   return (
     <main className="min-h-screen bg-trail-surface px-4 py-8 text-trail-ink">
+      {oauthMessage ? (
+        <div className="mx-auto mb-6 max-w-6xl">
+          <Alert
+            closable
+            message={oauthMessage}
+            onClose={dismissOauthError}
+            showIcon
+            type="error"
+          />
+        </div>
+      ) : null}
+      {sessionAthleteId !== null ? (
+        <div className="mx-auto mb-6 max-w-6xl">
+          <Alert
+            message="You’re signed in on this browser."
+            description={
+              <span className="flex flex-wrap items-center gap-3">
+                <span>
+                  Athlete id <strong>{sessionAthleteId}</strong> is saved locally. Open the dashboard to continue, or sign out to use another account.
+                </span>
+                <Button type="primary" onClick={() => navigate(`/dashboard?athlete_id=${sessionAthleteId}`)}>
+                  Open dashboard
+                </Button>
+                <Button
+                  type="link"
+                  className="p-0"
+                  onClick={() => {
+                    clearAthleteId()
+                    setAthleteId("")
+                    navigate("/", { replace: true })
+                  }}
+                >
+                  Sign out (clear this browser)
+                </Button>
+              </span>
+            }
+            showIcon
+            type="success"
+          />
+        </div>
+      ) : null}
       <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.05fr_0.95fr]">
         <ConnectPanel onConnect={connectStrava} />
         <AccessPanel

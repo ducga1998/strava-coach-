@@ -1,4 +1,5 @@
-import { Card, Statistic } from "antd"
+import { InfoCircleOutlined } from "@ant-design/icons"
+import { Card, Statistic, Tooltip } from "antd"
 
 export type MetricTone = "blue" | "emerald" | "amber" | "red" | "violet"
 
@@ -6,6 +7,8 @@ interface MetricBadgeProps {
   label: string
   value: string
   caption?: string
+  /** Short explanation shown on hover / tap (mobile). */
+  help?: string
   tone?: MetricTone
   selected?: boolean
   onSelect?: () => void
@@ -39,7 +42,20 @@ export default function MetricBadge(props: MetricBadgeProps) {
       bordered={false}
     >
       <Statistic
-        title={<span className="text-xs font-semibold uppercase text-slate-500">{props.label}</span>}
+        title={
+          <span className="flex items-center gap-1 text-xs font-semibold uppercase text-slate-500">
+            <span>{props.label}</span>
+            {props.help ? (
+              <Tooltip title={props.help} trigger={["hover", "click"]}>
+                <InfoCircleOutlined
+                  className="cursor-help align-middle text-[0.65rem] normal-case text-slate-400"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                />
+              </Tooltip>
+            ) : null}
+          </span>
+        }
         value={props.value}
         valueStyle={{ fontSize: '1.5rem', fontWeight: 700, color: 'inherit' }}
         formatter={(val) => <span className="text-2xl font-bold">{val}</span>}

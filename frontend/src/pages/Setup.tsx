@@ -1,7 +1,9 @@
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import { Steps, Button, Input, Select, Card, Typography } from "antd"
 import {
+  getAthleteInfo,
   getStoredAthleteId,
   requireAthleteId,
   saveOnboardingProfile,
@@ -37,6 +39,20 @@ export default function Setup() {
   const [form, setForm] = useState(initialForm)
   const [error, setError] = useState<string | null>(null)
 
+  const athleteQuery = useQuery({
+    queryKey: ["athlete", athleteId],
+    queryFn: () => getAthleteInfo(requireAthleteId(athleteId)),
+    enabled: athleteId !== null,
+  })
+
+  useEffect(() => {
+    if (athleteId === null) return
+    if (!athleteQuery.isSuccess) return
+    if (athleteQuery.data.profile?.onboarding_complete) {
+      navigate(`/dashboard?athlete_id=${athleteId}`, { replace: true })
+    }
+  }, [athleteId, athleteQuery.isSuccess, athleteQuery.data, navigate])
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const id = requireAthleteId(athleteId)
@@ -45,6 +61,12 @@ export default function Setup() {
   }
 
   if (athleteId === null) return <SetupStatus message="Add athlete_id in the URL before setup." />
+  if (athleteQuery.isPending) {
+    return <SetupStatus message="Loading your profile…" />
+  }
+  if (athleteQuery.isError) {
+    return <SetupStatus message={athleteQuery.error.message} />
+  }
 
   return (
     <main className="min-h-screen bg-trail-surface px-4 py-8 text-trail-ink">

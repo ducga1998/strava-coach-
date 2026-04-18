@@ -122,3 +122,23 @@ export type RaceTargetUpdatePayload = Partial<
 > & {
   athlete_id: number
 }
+
+export interface AthleteProfileInfo {
+  onboarding_complete: boolean
+  lthr: number | null
+  max_hr: number | null
+  threshold_pace_sec_km: number | null
+  weight_kg: number | null
+  vo2max_estimate: number | null
+}
+
+export interface AthleteInfo {
+  id: number
+  strava_athlete_id: number
+  firstname: string | null
+  lastname: string | null
+  avatar_url: string | null
+  city: string | null
+  country: string | null
+  profile: AthleteProfileInfo | null
+}

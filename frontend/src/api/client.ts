@@ -6,6 +6,7 @@ import axios, {
 import type {
   ActivityDetailResponse,
   ActivityListItem,
+  AthleteInfo,
   DashboardLoadResponse,
   OnboardingProfilePayload,
   RaceTarget,
@@ -49,11 +50,19 @@ export function persistAthleteId(athleteId: number): number {
   return athleteId
 }
 
+export function clearAthleteId(): void {
+  window.localStorage.removeItem(ATHLETE_ID_STORAGE_KEY)
+}
+
 export function requireAthleteId(athleteId: number | null): number {
   if (athleteId === null) {
     throw new ApiClientError("Athlete id is required before calling this API")
   }
   return athleteId
+}
+
+export async function getAthleteInfo(athleteId: number): Promise<AthleteInfo> {
+  return request(api.get(`/athletes/${athleteId}`))
 }
 
 export async function getDashboardLoad(

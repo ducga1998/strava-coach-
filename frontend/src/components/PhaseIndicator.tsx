@@ -1,4 +1,9 @@
+import { InfoCircleOutlined } from "@ant-design/icons"
+import { Tooltip } from "antd"
 import type { TrainingPhase } from "../types"
+
+const PHASE_HELP =
+  "Phase is inferred from your race date: Base builds volume, Build adds intensity, Peak sharpens fitness, Taper cuts load before race day."
 
 interface PhaseIndicatorProps {
   phase: TrainingPhase
@@ -16,7 +21,12 @@ export default function PhaseIndicator(props: PhaseIndicatorProps) {
   const weeks = getWeeksToTarget(props.targetDate)
   return (
     <span className={`inline-flex flex-col rounded-lg border px-3 py-2 ${phaseClasses[props.phase]}`}>
-      <span className="text-xs font-semibold uppercase">Training phase</span>
+      <span className="flex items-center gap-1 text-xs font-semibold uppercase">
+        Training phase
+        <Tooltip title={PHASE_HELP} trigger={["hover", "click"]}>
+          <InfoCircleOutlined className="cursor-help text-[0.65rem] normal-case opacity-70" />
+        </Tooltip>
+      </span>
       <span className="text-sm font-bold">{props.phase}</span>
       {weeks !== null ? <span className="text-xs">{weeks} weeks out</span> : null}
     </span>

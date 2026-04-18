@@ -1,8 +1,12 @@
+import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.agents.debrief_graph import generate_debrief
 from app.agents.schema import ActivityInput, AthleteContext
@@ -47,8 +51,67 @@ async def ingest_activity(
     credential = await _find_credential(session, athlete.id)
     if credential is None:
         return IngestionResult(status="skipped", reason="credentials_not_found")
-    token = token_service.decrypt(credential.access_token_enc)
+    token = await _get_valid_token(session, credential, client, token_service)
     return await _fetch_store_process(session, athlete.id, strava_activity_id, client, token)
+
+
+async def backfill_recent_activities(
+    session: AsyncSession,
+    athlete_id: int,
+    client: StravaClientProtocol,
+    token_service: TokenService,
+    limit: int = 10,
+) -> int:
+    credential = await _find_credential(session, athlete_id)
+    if credential is None:
+        return 0
+    token = await _get_valid_token(session, credential, client, token_service)
+    summaries = await client.get_athlete_activities(token, per_page=limit)
+    strava_ids = [s["id"] for s in summaries if "id" in s]
+    existing = await _get_existing_strava_ids(session, athlete_id, strava_ids)
+    count = 0
+    for summary in summaries:
+        strava_id = summary.get("id")
+        if strava_id is None or strava_id in existing:
+            continue
+        try:
+            await _fetch_store_process(session, athlete_id, strava_id, client, token)
+            count += 1
+        except Exception:
+            logger.warning("backfill skipped activity %s", strava_id, exc_info=True)
+    return count
+
+
+async def _get_existing_strava_ids(
+    session: AsyncSession, athlete_id: int, candidate_ids: list[int]
+) -> set[int]:
+    if not candidate_ids:
+        return set()
+    result = await session.execute(
+        select(Activity.strava_activity_id).where(
+            Activity.athlete_id == athlete_id,
+            Activity.strava_activity_id.in_(candidate_ids),
+        )
+    )
+    return set(result.scalars().all())
+
+
+async def _get_valid_token(
+    session: AsyncSession,
+    credential: StravaCredential,
+    client: StravaClientProtocol,
+    token_service: TokenService,
+) -> str:
+    if int(time.time()) < credential.expires_at - 60:
+        return token_service.decrypt(credential.access_token_enc)
+    refresh_token = token_service.decrypt(credential.refresh_token_enc)
+    new_token = await client.refresh_access_token(refresh_token)
+    credential.access_token_enc = token_service.encrypt(new_token["access_token"])
+    credential.refresh_token_enc = token_service.encrypt(new_token["refresh_token"])
+    credential.expires_at = new_token["expires_at"]
+    credential.refresh_failure_count = 0
+    await session.commit()
+    return new_token["access_token"]
 
 
 async def _fetch_store_process(
@@ -62,7 +125,12 @@ async def _fetch_store_process(
     streams = await client.get_activity_streams(access_token, strava_activity_id)
     activity = _build_activity(athlete_id, strava_activity_id, data, streams)
     await _persist_activity(session, activity)
-    await process_activity_metrics(session, activity)
+    try:
+        await process_activity_metrics(session, activity)
+    except Exception:
+        activity.processing_status = "failed"
+        await session.commit()
+        raise
     return IngestionResult(status="stored", activity_id=activity.id)
 
 
