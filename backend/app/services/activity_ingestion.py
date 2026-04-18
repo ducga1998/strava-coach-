@@ -1,20 +1,23 @@
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 from app.agents.debrief_graph import generate_debrief
-from app.agents.schema import ActivityInput, AthleteContext
+from app.agents.schema import ActivityInput, AthleteContext, RaceTargetContext
+from app.config import settings
 from app.metrics.engine import compute_activity_metrics
 from app.models.activity import Activity
 from app.models.athlete import Athlete, AthleteProfile
 from app.models.credentials import StravaCredential
-from app.models.metrics import ActivityMetrics
+from app.models.metrics import ActivityMetrics, LoadHistory
+from app.models.target import Priority, RaceTarget
+from app.services.description_builder import format_strava_description
 from app.services.strava_client import StravaClientProtocol, StravaStreamPayload
 from app.services.strava_client import StravaActivityPayload
 from app.services.token_service import TokenService
@@ -131,6 +134,7 @@ async def _fetch_store_process(
         activity.processing_status = "failed"
         await session.commit()
         raise
+    await _push_description(session, activity, client, access_token)
     return IngestionResult(status="stored", activity_id=activity.id)
 
 
@@ -140,10 +144,54 @@ async def process_activity_metrics(session: AsyncSession, activity: Activity) ->
         return
     profile = await _find_profile(session, activity.athlete_id)
     metrics, values = _compute_metrics(activity, profile)
+    context = await _build_athlete_context(session, activity.athlete_id, profile)
     session.add(metrics)
-    activity.debrief = await _generate_debrief(activity, profile, values)
+    activity.debrief = await _generate_debrief(activity, context, values)
     activity.processing_status = "done"
     await session.commit()
+
+
+async def _push_description(
+    session: AsyncSession,
+    activity: Activity,
+    client: StravaClientProtocol,
+    access_token: str,
+) -> None:
+    if not settings.strava_push_description:
+        return
+    if activity.debrief is None:
+        return
+    result = await session.execute(
+        select(ActivityMetrics).where(ActivityMetrics.activity_id == activity.id)
+    )
+    metrics = result.scalar_one_or_none()
+    if metrics is None:
+        return
+    load = await _latest_load(session, activity.athlete_id)
+    acwr = load.acwr if load else 1.0
+    z2_pct = float((metrics.zone_distribution or {}).get("z2_pct", 0.0))
+    description = format_strava_description(
+        tss=metrics.hr_tss or 0.0,
+        acwr=acwr,
+        z2_pct=z2_pct,
+        hr_drift_pct=metrics.hr_drift_pct or 0.0,
+        decoupling_pct=metrics.aerobic_decoupling_pct or 0.0,
+        next_action=str(activity.debrief.get("next_session_action", "")),
+        deep_dive_url=(
+            f"{settings.frontend_url}/activities/{activity.id}"
+            f"?athlete_id={activity.athlete_id}"
+        ),
+    )
+    try:
+        await client.update_activity_description(
+            access_token, activity.athlete_id, activity.strava_activity_id, description
+        )
+    except Exception:
+        logger.warning(
+            "failed to push description to Strava for activity %s",
+            activity.id,
+            exc_info=True,
+        )
 
 
 def _should_compute_metrics(activity: Activity) -> bool:
@@ -174,12 +222,99 @@ def _compute_metrics(
 
 async def _generate_debrief(
     activity: Activity,
-    profile: AthleteProfile | None,
+    context: AthleteContext,
     values: dict[str, object],
 ) -> dict[str, str]:
     activity_input = _activity_input(activity, values)
-    context = _athlete_context(profile)
     return await generate_debrief(activity_input, context)
+
+
+async def _build_athlete_context(
+    session: AsyncSession,
+    athlete_id: int,
+    profile: AthleteProfile | None,
+) -> AthleteContext:
+    load = await _latest_load(session, athlete_id)
+    tss_avg = await _tss_30d_avg(session, athlete_id)
+    target = await _find_nearest_target(session, athlete_id)
+    return AthleteContext(
+        lthr=profile.lthr if profile and profile.lthr else 155,
+        threshold_pace_sec_km=_threshold_pace(profile),
+        tss_30d_avg=tss_avg,
+        acwr=load.acwr if load else 1.0,
+        ctl=load.ctl if load else 0.0,
+        atl=load.atl if load else 0.0,
+        tsb=load.tsb if load else 0.0,
+        training_phase=_training_phase_for_target(target),
+        race_target=_race_target_context(target) if target else None,
+    )
+
+
+async def _latest_load(session: AsyncSession, athlete_id: int) -> LoadHistory | None:
+    result = await session.execute(
+        select(LoadHistory)
+        .where(LoadHistory.athlete_id == athlete_id)
+        .order_by(LoadHistory.date.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _tss_30d_avg(session: AsyncSession, athlete_id: int) -> float:
+    cutoff = date.today() - timedelta(days=30)
+    result = await session.execute(
+        select(func.avg(ActivityMetrics.hr_tss))
+        .join(Activity, Activity.id == ActivityMetrics.activity_id)
+        .where(
+            ActivityMetrics.athlete_id == athlete_id,
+            ActivityMetrics.hr_tss.isnot(None),
+            Activity.start_date >= cutoff,
+        )
+    )
+    avg = result.scalar_one_or_none()
+    return float(avg) if avg else 60.0
+
+
+async def _find_nearest_target(session: AsyncSession, athlete_id: int) -> RaceTarget | None:
+    result = await session.execute(
+        select(RaceTarget)
+        .where(
+            RaceTarget.athlete_id == athlete_id,
+            RaceTarget.race_date >= date.today(),
+            RaceTarget.priority == Priority.A,
+        )
+        .order_by(RaceTarget.race_date)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+def _race_target_context(target: RaceTarget) -> RaceTargetContext:
+    weeks_out = max((target.race_date - date.today()).days // 7, 0)
+    return RaceTargetContext(
+        race_name=target.race_name,
+        weeks_out=weeks_out,
+        distance_km=target.distance_km,
+        goal_time_sec=target.goal_time_sec,
+        training_phase=_compute_phase_from_weeks(weeks_out),
+    )
+
+
+def _training_phase_for_target(target: RaceTarget | None) -> str:
+    if target is None:
+        return "Base"
+    weeks_out = (target.race_date - date.today()).days // 7
+    return _compute_phase_from_weeks(weeks_out)
+
+
+def _compute_phase_from_weeks(weeks_out: int) -> str:
+    if weeks_out <= 3:
+        return "Taper"
+    if weeks_out <= 7:
+        return "Peak"
+    if weeks_out <= 15:
+        return "Build"
+    return "Base"
 
 
 def _activity_input(activity: Activity, values: dict[str, object]) -> ActivityInput:
@@ -194,19 +329,6 @@ def _activity_input(activity: Activity, values: dict[str, object]) -> ActivityIn
         aerobic_decoupling_pct=_float_value(values, "aerobic_decoupling_pct"),
         ngp_sec_km=_float_value(values, "ngp_sec_km"),
         zone_distribution=_zone_value(values),
-    )
-
-
-def _athlete_context(profile: AthleteProfile | None) -> AthleteContext:
-    return AthleteContext(
-        lthr=profile.lthr if profile and profile.lthr else 155,
-        threshold_pace_sec_km=_threshold_pace(profile),
-        tss_30d_avg=60.0,
-        acwr=1.0,
-        ctl=50.0,
-        atl=50.0,
-        tsb=0.0,
-        training_phase="Build",
     )
 
 

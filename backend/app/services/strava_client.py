@@ -81,7 +81,7 @@ class StravaClientProtocol(Protocol):
         raise NotImplementedError
 
     async def update_activity_description(
-        self, access_token: str, strava_activity_id: int, description: str
+        self, access_token: str, athlete_id: int, strava_activity_id: int, description: str
     ) -> None:
         raise NotImplementedError
 
@@ -159,7 +159,7 @@ class StravaClient:
         return cast(StravaStreamPayload, data)
 
     async def update_activity_description(
-        self, access_token: str, strava_activity_id: int, description: str
+        self, access_token: str, athlete_id: int, strava_activity_id: int, description: str
     ) -> None:
         await self._request(
             "PUT",
