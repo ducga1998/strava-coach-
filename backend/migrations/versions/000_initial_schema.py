@@ -17,9 +17,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE IF NOT EXISTS units AS ENUM ('metric', 'imperial')")
-    op.execute("CREATE TYPE IF NOT EXISTS priority AS ENUM ('A', 'B', 'C')")
-
     op.create_table(
         "athletes",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -169,3 +166,4 @@ def downgrade() -> None:
     op.drop_table("athletes")
     op.execute("DROP TYPE IF EXISTS priority")
     op.execute("DROP TYPE IF EXISTS units")
+
