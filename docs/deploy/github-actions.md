@@ -36,8 +36,9 @@ Current setup status:
 
 | secret | status |
 | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Needs manual value from Cloudflare dashboard |
+| `CLOUDFLARE_API_KEY` | Configured |
 | `CLOUDFLARE_ACCOUNT_ID` | Configured |
+| `CLOUDFLARE_EMAIL` | Configured |
 | `VITE_API_URL` | Configured |
 | `RAILWAY_TOKEN` | Configured |
 | `RAILWAY_PROJECT_ID` | Configured |
@@ -46,13 +47,14 @@ Current setup status:
 
 ### Frontend (Cloudflare)
 
-- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_API_KEY`
 - `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_EMAIL`
 - `VITE_API_URL`
 
 Notes:
 
-- `CLOUDFLARE_API_TOKEN` needs Cloudflare Pages deploy permission for project `strava-coach`.
+- `CLOUDFLARE_API_KEY` is the Cloudflare Global API Key paired with `CLOUDFLARE_EMAIL`.
 - `CLOUDFLARE_ACCOUNT_ID` is configured as `b486fb51a808d6c53183f43594357793`.
 - `VITE_API_URL` is configured as `https://backend-production-3f79.up.railway.app`.
 
