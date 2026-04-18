@@ -161,28 +161,28 @@ async def _push_description(
         return
     if activity.debrief is None:
         return
-    result = await session.execute(
-        select(ActivityMetrics).where(ActivityMetrics.activity_id == activity.id)
-    )
-    metrics = result.scalar_one_or_none()
-    if metrics is None:
-        return
-    load = await _latest_load(session, activity.athlete_id)
-    acwr = load.acwr if load else 1.0
-    z2_pct = float((metrics.zone_distribution or {}).get("z2_pct", 0.0))
-    description = format_strava_description(
-        tss=metrics.hr_tss or 0.0,
-        acwr=acwr,
-        z2_pct=z2_pct,
-        hr_drift_pct=metrics.hr_drift_pct or 0.0,
-        decoupling_pct=metrics.aerobic_decoupling_pct or 0.0,
-        next_action=str(activity.debrief.get("next_session_action", "")),
-        deep_dive_url=(
-            f"{settings.frontend_url}/activities/{activity.id}"
-            f"?athlete_id={activity.athlete_id}"
-        ),
-    )
     try:
+        result = await session.execute(
+            select(ActivityMetrics).where(ActivityMetrics.activity_id == activity.id)
+        )
+        metrics = result.scalar_one_or_none()
+        if metrics is None:
+            return
+        load = await _latest_load(session, activity.athlete_id)
+        acwr = load.acwr if load else 1.0
+        z2_pct = float((metrics.zone_distribution or {}).get("z2_pct", 0.0))
+        description = format_strava_description(
+            tss=metrics.hr_tss or 0.0,
+            acwr=acwr,
+            z2_pct=z2_pct,
+            hr_drift_pct=metrics.hr_drift_pct or 0.0,
+            decoupling_pct=metrics.aerobic_decoupling_pct or 0.0,
+            next_action=str(activity.debrief.get("next_session_action", "")),
+            deep_dive_url=(
+                f"{settings.frontend_url}/activities/{activity.id}"
+                f"?athlete_id={activity.athlete_id}"
+            ),
+        )
         await client.update_activity_description(
             access_token, activity.strava_activity_id, description
         )
@@ -261,7 +261,7 @@ async def _latest_load(session: AsyncSession, athlete_id: int) -> LoadHistory | 
 
 
 async def _tss_30d_avg(session: AsyncSession, athlete_id: int) -> float:
-    cutoff = date.today() - timedelta(days=30)
+    cutoff = datetime.combine(date.today() - timedelta(days=30), datetime.min.time())
     result = await session.execute(
         select(func.avg(ActivityMetrics.hr_tss))
         .join(Activity, Activity.id == ActivityMetrics.activity_id)
