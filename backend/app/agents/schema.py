@@ -14,6 +14,14 @@ class ActivityInput(BaseModel):
     zone_distribution: dict[str, float]
 
 
+class RaceTargetContext(BaseModel):
+    race_name: str
+    weeks_out: int
+    distance_km: float
+    goal_time_sec: int | None = None
+    training_phase: str  # Base / Build / Peak / Taper
+
+
 class AthleteContext(BaseModel):
     lthr: int
     threshold_pace_sec_km: int
@@ -23,6 +31,7 @@ class AthleteContext(BaseModel):
     atl: float
     tsb: float
     training_phase: str
+    race_target: RaceTargetContext | None = None  # None when no A-race configured
 
 
 class DebriefOutput(BaseModel):
