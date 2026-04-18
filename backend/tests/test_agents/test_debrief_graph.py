@@ -44,3 +44,66 @@ def sample_context() -> AthleteContext:
         tsb=-3.0,
         training_phase="Build",
     )
+
+
+from app.agents.schema import RaceTargetContext
+from app.agents.debrief_graph import next_session_action, _is_ultra_target
+
+
+def test_next_session_action_no_target_recovery() -> None:
+    result = next_session_action(acwr=1.6, tsb=-35.0, target=None)
+    assert "Recovery" in result
+    assert "Z1" in result or "Z1-Z2" in result
+
+
+def test_next_session_action_no_target_underload() -> None:
+    result = next_session_action(acwr=0.7, tsb=5.0, target=None)
+    assert "Z2" in result
+    assert "strides" in result.lower() or "aerobic" in result.lower()
+
+
+def test_next_session_action_prepends_race_name() -> None:
+    target = RaceTargetContext(
+        race_name="UTMB", weeks_out=10, distance_km=171.0, training_phase="Build"
+    )
+    result = next_session_action(acwr=1.1, tsb=-5.0, target=target)
+    assert result.startswith("UTMB 10w:")
+
+
+def test_next_session_action_vmm_ultra_build_adds_descent_cue() -> None:
+    target = RaceTargetContext(
+        race_name="VMM", weeks_out=8, distance_km=160.0, training_phase="Build"
+    )
+    result = next_session_action(acwr=1.1, tsb=2.0, target=target)
+    assert "VMM 8w:" in result
+    assert "downhill" in result.lower() or "descent" in result.lower() or ">15%" in result
+
+
+def test_next_session_action_vmm_no_descent_when_fatigued() -> None:
+    target = RaceTargetContext(
+        race_name="VMM", weeks_out=8, distance_km=160.0, training_phase="Build"
+    )
+    result = next_session_action(acwr=1.6, tsb=-35.0, target=target)
+    assert "VMM 8w:" in result
+    assert "Recovery" in result
+
+
+def test_is_ultra_target_by_distance() -> None:
+    target = RaceTargetContext(
+        race_name="Some Race", weeks_out=10, distance_km=100.0, training_phase="Build"
+    )
+    assert _is_ultra_target(target) is True
+
+
+def test_is_ultra_target_by_name() -> None:
+    target = RaceTargetContext(
+        race_name="VMM 80km", weeks_out=10, distance_km=50.0, training_phase="Build"
+    )
+    assert _is_ultra_target(target) is True
+
+
+def test_is_ultra_target_false_for_marathon() -> None:
+    target = RaceTargetContext(
+        race_name="Paris Marathon", weeks_out=10, distance_km=42.2, training_phase="Build"
+    )
+    assert _is_ultra_target(target) is False
