@@ -1,3 +1,4 @@
+import time
 from collections.abc import Mapping
 from typing import NotRequired, Protocol, TypedDict, cast
 from urllib.parse import urlencode
@@ -17,6 +18,9 @@ class StravaAthletePayload(TypedDict, total=False):
     id: int
     firstname: str
     lastname: str
+    profile: str
+    city: str
+    country: str
 
 
 class StravaTokenPayload(TypedDict):
@@ -24,6 +28,14 @@ class StravaTokenPayload(TypedDict):
     refresh_token: str
     expires_at: int
     athlete: StravaAthletePayload
+
+
+class StravaRefreshPayload(TypedDict):
+    """Token response from refresh_token grant (no athlete object)."""
+
+    access_token: str
+    refresh_token: str
+    expires_at: int
 
 
 class StravaActivityPayload(TypedDict, total=False):
@@ -50,7 +62,12 @@ class StravaClientProtocol(Protocol):
     async def exchange_code(self, code: str) -> StravaTokenPayload:
         raise NotImplementedError
 
-    async def refresh_access_token(self, refresh_token: str) -> StravaTokenPayload:
+    async def refresh_access_token(self, refresh_token: str) -> StravaRefreshPayload:
+        raise NotImplementedError
+
+    async def get_athlete_activities(
+        self, access_token: str, per_page: int = 10
+    ) -> list[StravaActivityPayload]:
         raise NotImplementedError
 
     async def get_activity(
@@ -63,9 +80,22 @@ class StravaClientProtocol(Protocol):
     ) -> StravaStreamPayload:
         raise NotImplementedError
 
+    async def update_activity_description(
+        self, access_token: str, strava_activity_id: int, description: str
+    ) -> None:
+        raise NotImplementedError
+
 
 class StravaPayloadError(ValueError):
     pass
+
+
+class StravaOAuthError(Exception):
+    """Strava returned an error for the token request (e.g. bad code, secret, or redirect config)."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(message)
 
 
 def get_authorization_url(state: str) -> str:
@@ -88,11 +118,23 @@ class StravaClient:
         data = await self._post_token({"code": code, "grant_type": "authorization_code"})
         return self._parse_token_payload(data)
 
-    async def refresh_access_token(self, refresh_token: str) -> StravaTokenPayload:
+    async def refresh_access_token(self, refresh_token: str) -> StravaRefreshPayload:
         data = await self._post_token(
             {"refresh_token": refresh_token, "grant_type": "refresh_token"}
         )
-        return self._parse_token_payload(data)
+        return self._parse_refresh_payload(data)
+
+    async def get_athlete_activities(
+        self, access_token: str, per_page: int = 10
+    ) -> list[StravaActivityPayload]:
+        data = await self._get_json(
+            f"{STRAVA_BASE_URL}/athlete/activities",
+            access_token,
+            {"per_page": str(per_page), "page": "1"},
+        )
+        if not isinstance(data, list):
+            raise StravaPayloadError("athlete activities response must be an array")
+        return [cast(StravaActivityPayload, item) for item in data if isinstance(item, dict)]
 
     async def get_activity(
         self, access_token: str, activity_id: int
@@ -116,13 +158,29 @@ class StravaClient:
             raise StravaPayloadError("streams response must be an object")
         return cast(StravaStreamPayload, data)
 
+    async def update_activity_description(
+        self, access_token: str, strava_activity_id: int, description: str
+    ) -> None:
+        await self._request(
+            "PUT",
+            f"{STRAVA_BASE_URL}/activities/{strava_activity_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"description": description},
+        )
+
     async def _post_token(self, values: Mapping[str, str]) -> object:
         payload = {
             "client_id": settings.strava_client_id,
             "client_secret": settings.strava_client_secret,
             **values,
         }
-        response = await self._request("POST", STRAVA_TOKEN_URL, data=payload)
+        if self._client is not None:
+            response = await self._client.post(STRAVA_TOKEN_URL, data=payload)
+        else:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(STRAVA_TOKEN_URL, data=payload)
+        if response.status_code >= 400:
+            raise StravaOAuthError(_format_strava_token_error(response))
         return response.json()
 
     async def _get_json(
@@ -147,14 +205,82 @@ class StravaClient:
     def _parse_token_payload(data: object) -> StravaTokenPayload:
         if not isinstance(data, dict):
             raise StravaPayloadError("token response must be an object")
-        if not isinstance(data.get("athlete"), dict):
+        athlete = data.get("athlete")
+        if not isinstance(athlete, dict):
             raise StravaPayloadError("token response missing athlete")
-        return cast(StravaTokenPayload, data)
+        if athlete.get("id") is None:
+            raise StravaPayloadError("token response athlete missing id")
+        access = data.get("access_token")
+        refresh = data.get("refresh_token")
+        if not isinstance(access, str) or not isinstance(refresh, str) or not access or not refresh:
+            raise StravaPayloadError("token response missing access_token or refresh_token")
+        expires_at = data.get("expires_at")
+        if expires_at is None and data.get("expires_in") is not None:
+            try:
+                expires_at = int(time.time()) + int(data["expires_in"])
+            except (TypeError, ValueError) as exc:
+                raise StravaPayloadError("token response has invalid expires_in") from exc
+        if expires_at is None:
+            raise StravaPayloadError("token response missing expires_at")
+        try:
+            expires_int = int(expires_at)
+        except (TypeError, ValueError) as exc:
+            raise StravaPayloadError("token response has invalid expires_at") from exc
+        normalized = {
+            **data,
+            "athlete": athlete,
+            "access_token": access,
+            "refresh_token": refresh,
+            "expires_at": expires_int,
+        }
+        return cast(StravaTokenPayload, normalized)
+
+    @staticmethod
+    def _parse_refresh_payload(data: object) -> StravaRefreshPayload:
+        if not isinstance(data, dict):
+            raise StravaPayloadError("token response must be an object")
+        access = data.get("access_token")
+        refresh = data.get("refresh_token")
+        if not isinstance(access, str) or not isinstance(refresh, str) or not access or not refresh:
+            raise StravaPayloadError("token response missing access_token or refresh_token")
+        expires_at = data.get("expires_at")
+        if expires_at is None and data.get("expires_in") is not None:
+            try:
+                expires_at = int(time.time()) + int(data["expires_in"])
+            except (TypeError, ValueError) as exc:
+                raise StravaPayloadError("token response has invalid expires_in") from exc
+        if expires_at is None:
+            raise StravaPayloadError("token response missing expires_at")
+        try:
+            expires_int = int(expires_at)
+        except (TypeError, ValueError) as exc:
+            raise StravaPayloadError("token response has invalid expires_at") from exc
+        return cast(
+            StravaRefreshPayload,
+            {"access_token": access, "refresh_token": refresh, "expires_at": expires_int},
+        )
 
 
 async def exchange_code(code: str) -> StravaTokenPayload:
     return await StravaClient().exchange_code(code)
 
 
-async def refresh_access_token(refresh_token: str) -> StravaTokenPayload:
+async def refresh_access_token(refresh_token: str) -> StravaRefreshPayload:
     return await StravaClient().refresh_access_token(refresh_token)
+
+
+def _format_strava_token_error(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+        if isinstance(body, dict):
+            msg = body.get("message")
+            errors = body.get("errors")
+            if msg:
+                parts: list[str] = [str(msg)]
+                if isinstance(errors, list) and errors:
+                    parts.append(str(errors))
+                return ": ".join(parts)
+    except ValueError:
+        pass
+    reason = response.reason_phrase or "error"
+    return f"HTTP {response.status_code} {reason}"
