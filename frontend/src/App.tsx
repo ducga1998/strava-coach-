@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom"
 import ActivityDetail from "./pages/ActivityDetail"
 import Connect from "./pages/Connect"
 import Dashboard from "./pages/Dashboard"
+import Home from "./pages/Home"
 import Setup from "./pages/Setup"
 import Targets from "./pages/Targets"
 
@@ -20,7 +21,8 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Connect />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/connect" element={<Connect />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/activities/:id" element={<ActivityDetail />} />

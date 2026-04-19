@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { Typography, Alert, Button } from "antd"
+import DarkAppShell from "../components/layout/DarkAppShell"
 import {
   getAthleteInfo,
   getDashboardLoad,
@@ -25,14 +26,33 @@ export default function Dashboard() {
   const loadQuery = useLoadQuery(athleteId)
   const activitiesQuery = useActivitiesQuery(athleteId)
   const athleteQuery = useAthleteQuery(athleteId)
-  if (athleteId === null) return <MissingAthleteState />
-  if (loadQuery.isPending) return <StatusPage message="Loading training load..." />
-  if (loadQuery.isError) return <StatusPage message={loadQuery.error.message} />
+  if (athleteId === null)
+    return (
+      <DarkAppShell>
+        <MissingAthleteState />
+      </DarkAppShell>
+    )
+  if (loadQuery.isPending)
+    return (
+      <DarkAppShell>
+        <StatusPage message="Loading training load..." />
+      </DarkAppShell>
+    )
+  if (loadQuery.isError)
+    return (
+      <DarkAppShell>
+        <StatusPage message={loadQuery.error.message} />
+      </DarkAppShell>
+    )
 
   const load = loadQuery.data ?? emptyLoad
   const activities = activitiesQuery.data ?? []
   const athlete = athleteQuery.data ?? null
-  return <DashboardView activities={activities} athlete={athlete} athleteId={athleteId} load={load} />
+  return (
+    <DarkAppShell>
+      <DashboardView activities={activities} athlete={athlete} athleteId={athleteId} load={load} />
+    </DarkAppShell>
+  )
 }
 
 function useLoadQuery(athleteId: number | null) {
@@ -67,7 +87,7 @@ function DashboardView(props: {
 }) {
   const latest = props.load.latest
   return (
-    <main className="min-h-screen bg-trail-surface px-4 py-6 text-trail-ink">
+    <main className="px-4 py-6 text-neutral-50">
       <div className="mx-auto max-w-6xl space-y-6">
         <DashboardHeader athlete={props.athlete} load={props.load} />
         {isRiskZone(latest) ? <RiskBanner latest={latest} /> : null}
@@ -75,8 +95,8 @@ function DashboardView(props: {
         {props.athlete ? <AthleteCard athlete={props.athlete} /> : null}
         <MetricGrid load={props.load} />
         <section className="grid gap-6 xl:grid-cols-[1fr_320px]">
-          <LoadChart data={props.load.history} />
-          <AcwrGauge acwr={latest.acwr} />
+          <LoadChart data={props.load.history} variant="dark" />
+          <AcwrGauge acwr={latest.acwr} variant="dark" />
         </section>
         <RecentActivities activities={props.activities} athleteId={props.athleteId} />
       </div>
@@ -91,32 +111,35 @@ function DashboardHeader({ athlete, load }: { athlete: AthleteInfo | null; load:
       <div className="flex items-center gap-4">
         {athlete?.avatar_url ? (
           <img
-            src={athlete.avatar_url}
             alt={name ?? "Athlete"}
-            className="h-14 w-14 rounded-full border-2 border-white object-cover shadow-sm"
+            className="h-14 w-14 rounded-full border-2 border-white/20 object-cover shadow-sm"
+            src={athlete.avatar_url}
           />
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-200 text-xl font-bold text-slate-500 shadow-sm">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-white/5 text-xl font-bold text-brand-muted shadow-sm">
             {name ? name[0].toUpperCase() : "?"}
           </div>
         )}
         <div>
           {name ? (
-            <Typography.Title level={1} className="!mt-0 !mb-0 !text-2xl font-bold text-slate-950">
+            <Typography.Title className="!mt-0 !mb-0 !text-2xl font-bold !text-neutral-50" level={1}>
               {name}
             </Typography.Title>
           ) : null}
           {athlete?.city || athlete?.country ? (
-            <Typography.Text className="text-sm text-slate-500">
+            <Typography.Text className="text-sm text-brand-muted">
               {[athlete.city, athlete.country].filter(Boolean).join(", ")}
             </Typography.Text>
           ) : null}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <PhaseIndicator phase={load.training_phase} targetDate={load.target?.race_date} />
+        <PhaseIndicator phase={load.training_phase} targetDate={load.target?.race_date} variant="dark" />
         <Link to="/targets">
-          <Button className="rounded-lg border-slate-300 font-semibold text-slate-800" size="large">
+          <Button
+            className="rounded-lg !border-white/20 !bg-transparent !font-semibold !text-neutral-50 hover:!border-brand-teal/50 hover:!text-brand-teal"
+            size="large"
+          >
             Targets
           </Button>
         </Link>
@@ -129,7 +152,7 @@ function AthleteCard({ athlete }: { athlete: AthleteInfo }) {
   const p = athlete.profile
   if (!p || (!p.lthr && !p.threshold_pace_sec_km && !p.vo2max_estimate && !p.weight_kg)) return null
   return (
-    <section className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-white p-5 shadow-panel md:grid-cols-4">
+    <section className="grid grid-cols-2 gap-3 rounded-xl border border-white/[0.14] bg-brand-charcoal/70 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] md:grid-cols-4">
       <ProfileStat label="LTHR" value={p.lthr ? `${p.lthr} bpm` : null} hint="Lactate threshold HR" />
       <ProfileStat label="Threshold pace" value={p.threshold_pace_sec_km ? formatPace(p.threshold_pace_sec_km) : null} hint="min/km at LT" />
       <ProfileStat label="VO₂max" value={p.vo2max_estimate ? `${p.vo2max_estimate.toFixed(1)} ml/kg/min` : null} hint="Aerobic capacity estimate" />
@@ -142,9 +165,9 @@ function ProfileStat({ label, value, hint }: { label: string; value: string | nu
   if (!value) return null
   return (
     <div>
-      <p className="text-xs font-semibold uppercase text-slate-400">{label}</p>
-      <p className="mt-1 text-lg font-bold text-slate-950">{value}</p>
-      <p className="text-xs text-slate-400">{hint}</p>
+      <p className="text-xs font-semibold uppercase text-brand-muted">{label}</p>
+      <p className="mt-1 text-lg font-bold text-neutral-50">{value}</p>
+      <p className="text-xs text-brand-muted">{hint}</p>
     </div>
   )
 }
@@ -166,14 +189,15 @@ function MetricGrid({ load }: { load: DashboardLoadResponse }) {
   const volume = load.weekly_volume
   return (
     <section className="grid gap-4 md:grid-cols-4">
-      <MetricBadge label="CTL" value={load.latest.ctl.toFixed(1)} caption="Fitness" help={METRIC_HELP.ctl} tone="blue" />
-      <MetricBadge label="ATL" value={load.latest.atl.toFixed(1)} caption="Fatigue" help={METRIC_HELP.atl} tone="amber" />
+      <MetricBadge label="CTL" value={load.latest.ctl.toFixed(1)} caption="Fitness" help={METRIC_HELP.ctl} tone="blue" variant="dark" />
+      <MetricBadge label="ATL" value={load.latest.atl.toFixed(1)} caption="Fatigue" help={METRIC_HELP.atl} tone="amber" variant="dark" />
       <MetricBadge
         label="TSB"
         value={load.latest.tsb.toFixed(1)}
         caption="Form"
         help={METRIC_HELP.tsb}
         tone={load.latest.tsb < -30 ? "red" : "emerald"}
+        variant="dark"
       />
       <MetricBadge
         label="Weekly volume"
@@ -181,6 +205,7 @@ function MetricGrid({ load }: { load: DashboardLoadResponse }) {
         caption={formatElevation(volume)}
         help={METRIC_HELP.weeklyVolume}
         tone="violet"
+        variant="dark"
       />
     </section>
   )
@@ -188,9 +213,9 @@ function MetricGrid({ load }: { load: DashboardLoadResponse }) {
 
 function RecentActivities(props: { activities: ActivityListItem[]; athleteId: number }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
-      <h2 className="text-lg font-bold text-slate-950">Recent activities</h2>
-      <div className="mt-4 divide-y divide-slate-100">
+    <section className="rounded-xl border border-white/[0.14] bg-brand-charcoal/70 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+      <h2 className="text-lg font-bold text-neutral-50">Recent activities</h2>
+      <div className="mt-4 divide-y divide-white/10">
         {props.activities.map((activity) => (
           <ActivityRow activity={activity} athleteId={props.athleteId} key={activity.id} />
         ))}
@@ -203,10 +228,15 @@ function RecentActivities(props: { activities: ActivityListItem[]; athleteId: nu
 function ActivityRow(props: { activity: ActivityListItem; athleteId: number }) {
   const activity = props.activity
   return (
-    <Link className="flex flex-col gap-2 py-4 hover:bg-slate-50 md:flex-row md:items-center md:justify-between" to={`/activities/${activity.id}?athlete_id=${props.athleteId}`}>
+    <Link
+      className="flex flex-col gap-2 py-4 transition hover:bg-white/5 md:flex-row md:items-center md:justify-between"
+      to={`/activities/${activity.id}?athlete_id=${props.athleteId}`}
+    >
       <span>
-        <span className="block font-semibold text-slate-950">{activity.name}</span>
-        <span className="text-sm text-slate-500">{activity.sport_type} · {formatKm(activity.distance_m)} · {formatMinutes(activity.elapsed_time_sec)}</span>
+        <span className="block font-semibold text-neutral-50">{activity.name}</span>
+        <span className="text-sm text-brand-muted">
+          {activity.sport_type} · {formatKm(activity.distance_m)} · {formatMinutes(activity.elapsed_time_sec)}
+        </span>
       </span>
       <span className={statusClass(activity.processing_status)}>{activity.processing_status}</span>
     </Link>
@@ -215,22 +245,22 @@ function ActivityRow(props: { activity: ActivityListItem; athleteId: number }) {
 
 function RiskBanner({ latest }: { latest: LoadSnapshot }) {
   return (
-    <Alert 
-      type="error"
-      showIcon
-      message={`Injury risk zone: ACWR ${latest.acwr.toFixed(2)} and TSB ${latest.tsb.toFixed(1)}. Consider deloading before adding more load.`}
+    <Alert
       className="font-semibold"
+      message={`Injury risk zone: ACWR ${latest.acwr.toFixed(2)} and TSB ${latest.tsb.toFixed(1)}. Consider deloading before adding more load.`}
+      showIcon
+      type="error"
     />
   )
 }
 
 function BaseliningBanner({ count }: { count: number }) {
   return (
-    <Alert 
-      type="warning"
-      showIcon
-      message={`Baselining: ${Math.max(0, 14 - count)} more days needed for full load accuracy.`}
+    <Alert
       className="font-semibold"
+      message={`Baselining: ${Math.max(0, 14 - count)} more days needed for full load accuracy.`}
+      showIcon
+      type="warning"
     />
   )
 }
@@ -241,15 +271,17 @@ function MissingAthleteState() {
 
 function StatusPage({ message }: { message: string }) {
   return (
-    <main className="min-h-screen bg-trail-surface p-8 text-slate-800">
-      <p>{message}</p>
-      <Link className="mt-4 inline-block font-semibold text-blue-700" to="/">Go to connect</Link>
+    <main className="min-h-[50vh] px-4 py-12 text-neutral-50">
+      <p className="text-brand-muted">{message}</p>
+      <Link className="mt-4 inline-block font-semibold text-brand-teal hover:underline" to="/connect">
+        Go to connect
+      </Link>
     </main>
   )
 }
 
 function EmptyActivities() {
-  return <p className="py-6 text-sm text-slate-500">No processed activities yet.</p>
+  return <p className="py-6 text-sm text-brand-muted">No processed activities yet.</p>
 }
 
 function isRiskZone(latest: LoadSnapshot): boolean {
@@ -257,9 +289,9 @@ function isRiskZone(latest: LoadSnapshot): boolean {
 }
 
 function statusClass(status: ActivityListItem["processing_status"]): string {
-  if (status === "done") return "rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700"
-  if (status === "failed") return "rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700"
-  return "rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"
+  if (status === "done") return "rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300"
+  if (status === "failed") return "rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300"
+  return "rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-brand-muted"
 }
 
 function formatVolume(volume?: DashboardLoadResponse["weekly_volume"]): string {

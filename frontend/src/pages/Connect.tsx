@@ -1,12 +1,14 @@
 import { type FormEvent, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { Alert, Button, Input } from "antd"
+import DarkAppShell from "../components/layout/DarkAppShell"
 import {
   clearAthleteId,
   getApiBaseUrl,
   getStoredAthleteId,
   persistAthleteId,
 } from "../api/client"
+import ConnectSeo from "../seo/ConnectSeo"
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   strava_token:
@@ -49,77 +51,79 @@ export default function Connect() {
   }
 
   return (
-    <main className="min-h-screen bg-trail-surface px-4 py-8 text-trail-ink">
-      {oauthMessage ? (
+    <DarkAppShell>
+      <ConnectSeo />
+      <main className="px-4 py-8 text-neutral-50">
         <div className="mx-auto mb-6 max-w-6xl">
-          <Alert
-            closable
-            message={oauthMessage}
-            onClose={dismissOauthError}
-            showIcon
-            type="error"
-          />
+          <Link className="font-mono text-xs font-semibold text-brand-muted transition hover:text-white" to="/">
+            ← Back to home
+          </Link>
         </div>
-      ) : null}
-      {sessionAthleteId !== null ? (
-        <div className="mx-auto mb-6 max-w-6xl">
-          <Alert
-            message="You’re signed in on this browser."
-            description={
-              <span className="flex flex-wrap items-center gap-3">
-                <span>
-                  Athlete id <strong>{sessionAthleteId}</strong> is saved locally. Open the dashboard to continue, or sign out to use another account.
+        {oauthMessage ? (
+          <div className="mx-auto mb-6 max-w-6xl">
+            <Alert closable message={oauthMessage} onClose={dismissOauthError} showIcon type="error" />
+          </div>
+        ) : null}
+        {sessionAthleteId !== null ? (
+          <div className="mx-auto mb-6 max-w-6xl">
+            <Alert
+              message="You’re signed in on this browser."
+              description={
+                <span className="flex flex-wrap items-center gap-3">
+                  <span>
+                    Athlete id <strong>{sessionAthleteId}</strong> is saved locally. Open the dashboard to continue, or
+                    sign out to use another account.
+                  </span>
+                  <Button type="primary" onClick={() => navigate(`/dashboard?athlete_id=${sessionAthleteId}`)}>
+                    Open dashboard
+                  </Button>
+                  <Button
+                    className="p-0"
+                    type="link"
+                    onClick={() => {
+                      clearAthleteId()
+                      setAthleteId("")
+                      navigate("/", { replace: true })
+                    }}
+                  >
+                    Sign out (clear this browser)
+                  </Button>
                 </span>
-                <Button type="primary" onClick={() => navigate(`/dashboard?athlete_id=${sessionAthleteId}`)}>
-                  Open dashboard
-                </Button>
-                <Button
-                  type="link"
-                  className="p-0"
-                  onClick={() => {
-                    clearAthleteId()
-                    setAthleteId("")
-                    navigate("/", { replace: true })
-                  }}
-                >
-                  Sign out (clear this browser)
-                </Button>
-              </span>
-            }
-            showIcon
-            type="success"
+              }
+              showIcon
+              type="success"
+            />
+          </div>
+        ) : null}
+        <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+          <ConnectPanel onConnect={connectStrava} />
+          <AccessPanel
+            athleteId={athleteId}
+            error={error}
+            onChange={setAthleteId}
+            onSubmit={continueWithId}
           />
-        </div>
-      ) : null}
-      <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-        <ConnectPanel onConnect={connectStrava} />
-        <AccessPanel
-          athleteId={athleteId}
-          error={error}
-          onChange={setAthleteId}
-          onSubmit={continueWithId}
-        />
-      </section>
-    </main>
+        </section>
+      </main>
+    </DarkAppShell>
   )
 }
 
 function ConnectPanel(props: { onConnect: () => void }) {
   return (
-    <div className="rounded-lg bg-slate-950 p-8 text-white shadow-panel">
-      <p className="text-sm font-semibold uppercase text-orange-300">Strava AI Coach</p>
-      <h1 className="mt-6 max-w-2xl text-4xl font-bold leading-tight md:text-6xl">
+    <div className="rounded-2xl border border-white/[0.14] bg-brand-charcoal/90 p-8 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+      <p className="text-sm font-semibold uppercase tracking-wide text-brand-teal">Strava AI Coach</p>
+      <h1 className="mt-6 max-w-2xl text-4xl font-bold leading-tight text-neutral-50 md:text-6xl">
         Numeric coaching after every trail run.
       </h1>
-      <p className="mt-5 max-w-xl text-base leading-7 text-slate-300">
-        Connect Strava, set your thresholds, and review load, ACWR, and debriefs
-        built around your current race target.
+      <p className="mt-5 max-w-xl text-base leading-7 text-brand-muted">
+        Connect Strava, set your thresholds, and review load, ACWR, and debriefs built around your current race target.
       </p>
       <Button
-        type="primary"
+        className="mt-8 border-none font-bold !bg-trail-strava !text-white hover:!bg-orange-600"
         size="large"
+        type="primary"
         onClick={props.onConnect}
-        className="mt-8 bg-trail-strava border-none font-bold text-white transition hover:bg-orange-600"
         style={{ height: "auto", padding: "0.75rem 1.25rem", borderRadius: "0.5rem" }}
       >
         Connect Strava
@@ -135,38 +139,39 @@ function AccessPanel(props: {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-panel">
-      <h2 className="text-xl font-bold text-slate-950">Open your dashboard</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-600">
-        OAuth redirects back with an athlete id. During local backend work, enter
-        that id here to load the app shell and API-backed screens.
+    <div className="rounded-2xl border border-white/[0.14] bg-brand-charcoal/60 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+      <h2 className="text-xl font-bold text-neutral-50">Open your dashboard</h2>
+      <p className="mt-2 text-sm leading-6 text-brand-muted">
+        OAuth redirects back with an athlete id. During local backend work, enter that id here to load the app shell and
+        API-backed screens.
       </p>
       <form className="mt-6 space-y-4" onSubmit={props.onSubmit}>
         <label className="block">
-          <span className="mb-2 block text-sm font-semibold text-slate-700">Athlete id</span>
+          <span className="mb-2 block text-sm font-semibold text-neutral-200">Athlete id</span>
           <Input
-            className="w-full rounded-lg px-3 py-3 text-slate-950"
+            className="!border-white/15 !bg-black/30 !text-neutral-50 placeholder:!text-brand-muted"
             inputMode="numeric"
             onChange={(event) => props.onChange(event.target.value)}
             placeholder="1"
             value={props.athleteId}
           />
         </label>
-        {props.error ? <p className="text-sm font-semibold text-red-600">{props.error}</p> : null}
-        <Button 
-          type="primary" 
-          htmlType="submit" 
-          className="w-full bg-slate-950 font-bold text-white hover:!bg-slate-800"
+        {props.error ? <p className="text-sm font-semibold text-red-400">{props.error}</p> : null}
+        <Button
+          className="w-full !border-brand-teal/40 !bg-brand-teal/15 !font-bold !text-brand-teal hover:!bg-brand-teal/25"
+          htmlType="submit"
+          size="large"
+          type="default"
           style={{ height: "auto", padding: "0.75rem 1rem", borderRadius: "0.5rem" }}
         >
           Continue
         </Button>
       </form>
       <div className="mt-6 flex flex-wrap gap-3 text-sm">
-        <Link className="font-semibold text-blue-700 hover:underline" to="/setup">
+        <Link className="font-semibold text-brand-teal hover:underline" to="/setup">
           Setup profile
         </Link>
-        <Link className="font-semibold text-blue-700 hover:underline" to="/targets">
+        <Link className="font-semibold text-brand-teal hover:underline" to="/targets">
           Manage targets
         </Link>
       </div>

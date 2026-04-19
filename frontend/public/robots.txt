@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+# Production builds with VITE_SITE_URL replace this file with a version that includes Sitemap: …
