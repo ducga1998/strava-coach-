@@ -46,7 +46,8 @@ Current setup status:
 
 ### Frontend (Cloudflare)
 
-- `CLOUDFLARE_API_TOKEN` — **API Token** (not the Global API Key). In Cloudflare Dashboard → **My Profile → API Tokens**, create a token with **Account → Cloudflare Pages → Edit** (or use the “Edit Cloudflare Workers” template). Wrangler reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; pairing **Global API Key + email** caused auth error **9106** with Wrangler 4.
+- `CLOUDFLARE_API_TOKEN` — Must be an **API Token** from **My Profile → API Tokens → Create Token**. Use **Account → Cloudflare Pages → Edit** (or the “Edit Cloudflare Workers” template).  
+  **Do not** put the **Global API Key** (from API Keys → Global API Key) into this secret — Wrangler will fail with **6111 Invalid Authorization header** or **9106**. Global API Key + email is only for `CLOUDFLARE_API_KEY` + `CLOUDFLARE_EMAIL` (legacy; not used by this workflow).
 - `CLOUDFLARE_ACCOUNT_ID` — Account ID from the Cloudflare dashboard overview.
 - `VITE_API_URL` — Production API origin passed into the Vite build.
 
