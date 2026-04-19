@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import BigInteger, func, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -415,7 +415,9 @@ async def _find_activity(
     session: AsyncSession, strava_activity_id: int
 ) -> Activity | None:
     result = await session.execute(
-        select(Activity).where(Activity.strava_activity_id == strava_activity_id)
+        select(Activity).where(
+            Activity.strava_activity_id == type_coerce(strava_activity_id, BigInteger)
+        )
     )
     return result.scalar_one_or_none()
 
@@ -447,7 +449,9 @@ async def _delete_metrics(session: AsyncSession, activity_id: int) -> None:
 
 async def _find_athlete(session: AsyncSession, strava_athlete_id: int) -> Athlete | None:
     result = await session.execute(
-        select(Athlete).where(Athlete.strava_athlete_id == strava_athlete_id)
+        select(Athlete).where(
+            Athlete.strava_athlete_id == type_coerce(strava_athlete_id, BigInteger)
+        )
     )
     return result.scalar_one_or_none()
 

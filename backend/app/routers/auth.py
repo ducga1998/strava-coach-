@@ -3,7 +3,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import BigInteger, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -40,7 +40,7 @@ async def strava_callback(
 ) -> RedirectResponse:
     if state not in _state_store:
         return RedirectResponse(
-            f"{settings.frontend_url}/?oauth_error=invalid_state", status_code=302
+            f"{settings.frontend_url}/connect?oauth_error=invalid_state", status_code=302
         )
     _state_store.remove(state)
 
@@ -53,25 +53,25 @@ async def strava_callback(
         await db.rollback()
         logger.warning("Strava token exchange failed: %s", exc.message)
         return RedirectResponse(
-            f"{settings.frontend_url}/?oauth_error=strava_token", status_code=302
+            f"{settings.frontend_url}/connect?oauth_error=strava_token", status_code=302
         )
     except StravaPayloadError as exc:
         await db.rollback()
         logger.warning("Strava token payload invalid: %s", exc)
         return RedirectResponse(
-            f"{settings.frontend_url}/?oauth_error=strava_payload", status_code=302
+            f"{settings.frontend_url}/connect?oauth_error=strava_payload", status_code=302
         )
     except TokenServiceError:
         await db.rollback()
         logger.exception("Encrypting Strava tokens failed — check ENCRYPTION_KEY")
         return RedirectResponse(
-            f"{settings.frontend_url}/?oauth_error=encryption_config", status_code=302
+            f"{settings.frontend_url}/connect?oauth_error=encryption_config", status_code=302
         )
     except Exception:
         await db.rollback()
         logger.exception("OAuth callback failed")
         return RedirectResponse(
-            f"{settings.frontend_url}/?oauth_error=server_error", status_code=302
+            f"{settings.frontend_url}/connect?oauth_error=server_error", status_code=302
         )
 
     return RedirectResponse(f"{settings.frontend_url}/setup?athlete_id={athlete.id}")
@@ -82,7 +82,9 @@ async def upsert_athlete(
 ) -> Athlete:
     strava_athlete = token_data["athlete"]
     result = await db.execute(
-        select(Athlete).where(Athlete.strava_athlete_id == strava_athlete["id"])
+        select(Athlete).where(
+            Athlete.strava_athlete_id == type_coerce(strava_athlete["id"], BigInteger)
+        )
     )
     athlete = result.scalar_one_or_none()
     if athlete is not None:
