@@ -4,5 +4,6 @@ __pycache__/
 .pytest_cache/
 *.pyc
 node_modules/
+.wrangler/
 dist/
 *.tsbuildinfo

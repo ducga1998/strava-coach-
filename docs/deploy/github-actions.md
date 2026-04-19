@@ -36,10 +36,9 @@ Current setup status:
 
 | secret | status |
 | --- | --- |
-| `CLOUDFLARE_API_KEY` | Configured |
-| `CLOUDFLARE_ACCOUNT_ID` | Configured |
-| `CLOUDFLARE_EMAIL` | Configured |
-| `VITE_API_URL` | Configured |
+| `CLOUDFLARE_API_TOKEN` | Required (Wrangler 4 / Pages deploy) |
+| `CLOUDFLARE_ACCOUNT_ID` | Required |
+| `VITE_API_URL` | Required |
 | `RAILWAY_TOKEN` | Configured |
 | `RAILWAY_PROJECT_ID` | Configured |
 | `RAILWAY_ENVIRONMENT` | Configured |
@@ -47,16 +46,11 @@ Current setup status:
 
 ### Frontend (Cloudflare)
 
-- `CLOUDFLARE_API_KEY`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_EMAIL`
-- `VITE_API_URL`
+- `CLOUDFLARE_API_TOKEN` — **API Token** (not the Global API Key). In Cloudflare Dashboard → **My Profile → API Tokens**, create a token with **Account → Cloudflare Pages → Edit** (or use the “Edit Cloudflare Workers” template). Wrangler reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; pairing **Global API Key + email** caused auth error **9106** with Wrangler 4.
+- `CLOUDFLARE_ACCOUNT_ID` — Account ID from the Cloudflare dashboard overview.
+- `VITE_API_URL` — Production API origin passed into the Vite build.
 
-Notes:
-
-- `CLOUDFLARE_API_KEY` is the Cloudflare Global API Key paired with `CLOUDFLARE_EMAIL`.
-- `CLOUDFLARE_ACCOUNT_ID` is configured as `b486fb51a808d6c53183f43594357793`.
-- `VITE_API_URL` is configured as `https://backend-production-3f79.up.railway.app`.
+Legacy secrets `CLOUDFLARE_API_KEY` / `CLOUDFLARE_EMAIL` are no longer used by the workflow.
 
 ### Backend (Railway)
 
