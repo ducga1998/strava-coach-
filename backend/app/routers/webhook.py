@@ -6,12 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.services.activity_ingestion import delete_activity, mark_athlete_deauthorized
-from app.workers.tasks import (
-    enqueue_activity,
-    enqueue_activity_delete,
-    enqueue_activity_update,
-    enqueue_athlete_revoke,
-)
+from app.workers.tasks import enqueue_activity
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 
