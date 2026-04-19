@@ -52,6 +52,15 @@ Current setup status:
 
 Legacy secrets `CLOUDFLARE_API_KEY` / `CLOUDFLARE_EMAIL` are no longer used by the workflow.
 
+If deploy fails with **Authentication failed [code: 9106]**, the `CLOUDFLARE_API_TOKEN` value in GitHub is invalid or lacks **Cloudflare Pages → Edit**. Create a new API token in the Cloudflare dashboard, then from this repo (with `gh` CLI logged in):
+
+```bash
+export CLOUDFLARE_API_TOKEN='your-new-token'
+./scripts/sync-cloudflare-token-to-github.sh
+```
+
+Re-run the workflow from the Actions tab.
+
 ### Backend (Railway)
 
 - `RAILWAY_TOKEN`
