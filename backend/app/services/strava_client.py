@@ -149,11 +149,16 @@ class StravaClient:
     async def get_activity_streams(
         self, access_token: str, activity_id: int
     ) -> StravaStreamPayload:
-        data = await self._get_json(
-            f"{STRAVA_BASE_URL}/activities/{activity_id}/streams",
-            access_token,
-            {"keys": STREAM_KEYS, "key_by_type": "true"},
-        )
+        try:
+            data = await self._get_json(
+                f"{STRAVA_BASE_URL}/activities/{activity_id}/streams",
+                access_token,
+                {"keys": STREAM_KEYS, "key_by_type": "true"},
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return cast(StravaStreamPayload, {})
+            raise
         if not isinstance(data, dict):
             raise StravaPayloadError("streams response must be an object")
         return cast(StravaStreamPayload, data)

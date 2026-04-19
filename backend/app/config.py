@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     jwt_secret: str = "test-jwt-secret"
     frontend_url: str = "http://localhost:5173"
     cors_origins: str = ""
-    enable_llm_debriefs: bool = False
-    strava_push_description: bool = False
+    enable_llm_debriefs: bool = True
+    strava_push_description: bool = True
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
