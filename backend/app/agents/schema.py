@@ -12,6 +12,8 @@ class ActivityInput(BaseModel):
     aerobic_decoupling_pct: float
     ngp_sec_km: float
     zone_distribution: dict[str, float]
+    elevation_gain_m: float = 0.0
+    cadence_avg: float | None = None
 
 
 class RaceTargetContext(BaseModel):
@@ -31,10 +33,12 @@ class AthleteContext(BaseModel):
     atl: float
     tsb: float
     training_phase: str
-    race_target: RaceTargetContext | None = None  # None when no A-race configured
+    race_target: RaceTargetContext | None = None
 
 
 class DebriefOutput(BaseModel):
-    load_verdict: str = Field(max_length=400)
-    technical_insight: str = Field(max_length=400)
-    next_session_action: str = Field(max_length=400)
+    load_verdict: str = Field(max_length=500)
+    technical_insight: str = Field(max_length=500)
+    next_session_action: str = Field(max_length=500)
+    nutrition_protocol: str = Field(default="", max_length=500)
+    vmm_projection: str = Field(default="", max_length=500)

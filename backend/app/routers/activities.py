@@ -41,6 +41,8 @@ class DebriefOut(BaseModel):
     load_verdict: str
     technical_insight: str
     next_session_action: str
+    nutrition_protocol: str = ""
+    vmm_projection: str = ""
 
 
 class ActivityDetailOut(BaseModel):

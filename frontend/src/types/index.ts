@@ -78,6 +78,8 @@ export interface Debrief {
   load_verdict: string
   technical_insight: string
   next_session_action: string
+  nutrition_protocol?: string
+  vmm_projection?: string
 }
 
 export interface ActivityDetail {

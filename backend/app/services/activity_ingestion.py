@@ -182,6 +182,8 @@ async def _push_description(
                 f"{settings.frontend_url}/activities/{activity.id}"
                 f"?athlete_id={activity.athlete_id}"
             ),
+            nutrition_protocol=str(activity.debrief.get("nutrition_protocol", "")),
+            vmm_projection=str(activity.debrief.get("vmm_projection", "")),
         )
         await client.update_activity_description(
             access_token, activity.strava_activity_id, description
@@ -318,6 +320,10 @@ def _compute_phase_from_weeks(weeks_out: int) -> str:
 
 
 def _activity_input(activity: Activity, values: dict[str, object]) -> ActivityInput:
+    cadence_data = (activity.streams_raw or {}).get("cadence", {})
+    cadence_list = [float(v) for v in (cadence_data.get("data") or []) if isinstance(v, int | float) and v > 0]
+    cadence_avg = sum(cadence_list) / len(cadence_list) if cadence_list else None
+
     return ActivityInput(
         activity_name=activity.name or "Run",
         duration_sec=activity.elapsed_time_sec or 0,
@@ -329,6 +335,8 @@ def _activity_input(activity: Activity, values: dict[str, object]) -> ActivityIn
         aerobic_decoupling_pct=_float_value(values, "aerobic_decoupling_pct"),
         ngp_sec_km=_float_value(values, "ngp_sec_km"),
         zone_distribution=_zone_value(values),
+        elevation_gain_m=activity.total_elevation_gain_m or 0.0,
+        cadence_avg=cadence_avg,
     )
 
 
@@ -431,6 +439,8 @@ async def push_description_for_activity(
             f"{settings.frontend_url}/activities/{activity.id}"
             f"?athlete_id={activity.athlete_id}"
         ),
+        nutrition_protocol=str(activity.debrief.get("nutrition_protocol", "")),
+        vmm_projection=str(activity.debrief.get("vmm_projection", "")),
     )
     await client.update_activity_description(token, activity.strava_activity_id, description)
     return description

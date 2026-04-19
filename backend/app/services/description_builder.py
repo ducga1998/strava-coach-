@@ -16,11 +16,20 @@ def format_strava_description(
     decoupling_pct: float,
     next_action: str,
     deep_dive_url: str,
+    nutrition_protocol: str = "",
+    vmm_projection: str = "",
 ) -> str:
     zone = acwr_zone_label(acwr)
-    return (
-        f"⚡ TSS {tss:.0f} · ACWR {acwr:.2f} ({zone}) · Z2 {z2_pct:.0f}%\n"
-        f"📉 HR drift {hr_drift_pct:.1f}% · decoupling {decoupling_pct:.1f}%\n"
-        f"→ {next_action}\n"
-        f"🔍 {deep_dive_url}"
-    )
+    lines = [
+        f"⚡ TSS {tss:.0f} · ACWR {acwr:.2f} ({zone}) · Z2 {z2_pct:.0f}%",
+        f"📉 HR drift {hr_drift_pct:.1f}% · decoupling {decoupling_pct:.1f}%",
+    ]
+    if nutrition_protocol:
+        lines.append(f"🍜 {nutrition_protocol}")
+    if vmm_projection:
+        lines.append(f"🏔️ {vmm_projection}")
+    lines += [
+        f"→ {next_action}",
+        f"🔍 {deep_dive_url}",
+    ]
+    return "\n".join(lines)
