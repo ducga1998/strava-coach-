@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { getActivityDetail, getStoredAthleteId } from "../api/client"
+import { getActivityDetail, getStoredAthleteId, pushActivityDescription } from "../api/client"
 import DebriefCard from "../components/DebriefCard"
 import MetricBadge, { type MetricTone } from "../components/MetricBadge"
 import type { ActivityDetailResponse, ActivityMetrics } from "../types"
@@ -21,7 +21,14 @@ export default function ActivityDetail() {
   if (activityId === null) return <ActivityStatus message="Invalid activity id." />
   if (query.isPending) return <ActivityStatus message="Loading activity debrief..." />
   if (query.isError) return <ActivityStatus message={query.error.message} />
-  return <ActivityDetailView data={query.data} selectedMetric={selectedMetric} onSelectMetric={setSelectedMetric} />
+  return (
+    <ActivityDetailView
+      activityId={activityId}
+      data={query.data}
+      selectedMetric={selectedMetric}
+      onSelectMetric={setSelectedMetric}
+    />
+  )
 }
 
 function useActivityId(): number | null {
@@ -39,6 +46,7 @@ function useActivityQuery(activityId: number | null) {
 }
 
 function ActivityDetailView(props: {
+  activityId: number
   data: ActivityDetailResponse
   selectedMetric: string
   onSelectMetric: (metric: string) => void
@@ -49,7 +57,7 @@ function ActivityDetailView(props: {
     <main className="min-h-screen bg-trail-surface px-4 py-6 text-trail-ink">
       <div className="mx-auto max-w-4xl space-y-6">
         <BackLink />
-        <ActivityHeader data={props.data} />
+        <ActivityHeader data={props.data} activityId={props.activityId} />
         <MetricPanel metrics={metrics} selected={props.selectedMetric} onSelect={props.onSelectMetric} />
         {selected ? <MetricSource metric={selected} /> : null}
         {props.data.debrief ? <DebriefCard debrief={props.data.debrief} /> : <DebriefPending />}
@@ -64,15 +72,79 @@ function BackLink() {
   return <Link className="font-semibold text-blue-700 hover:underline" to={path}>Back to dashboard</Link>
 }
 
-function ActivityHeader({ data }: { data: ActivityDetailResponse }) {
+function ActivityHeader({ data, activityId }: { data: ActivityDetailResponse; activityId: number }) {
   return (
     <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
-      <p className="text-sm font-semibold uppercase text-trail-strava">{data.activity.sport_type}</p>
-      <h1 className="mt-2 text-3xl font-bold text-slate-950">{data.activity.name}</h1>
-      <p className="mt-2 text-sm text-slate-500">
-        {formatDate(data.activity.start_date)} · {formatKm(data.activity.distance_m)} · {formatDuration(data.activity.elapsed_time_sec)}
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold uppercase text-trail-strava">{data.activity.sport_type}</p>
+          <h1 className="mt-2 text-3xl font-bold text-slate-950">{data.activity.name}</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            {formatDate(data.activity.start_date)} · {formatKm(data.activity.distance_m)} · {formatDuration(data.activity.elapsed_time_sec)}
+          </p>
+        </div>
+        <PushDescriptionButton activityId={activityId} hasDebrief={data.debrief !== null} />
+      </div>
     </header>
+  )
+}
+
+function PushDescriptionButton({ activityId, hasDebrief }: { activityId: number; hasDebrief: boolean }) {
+  const mutation = useMutation({
+    mutationFn: () => pushActivityDescription(activityId),
+  })
+
+  if (mutation.isSuccess) {
+    return (
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-green-100 px-3 py-1.5 text-sm font-medium text-green-800">
+          ✓ Pushed to Strava
+        </span>
+        <button
+          className="text-xs text-slate-400 hover:text-slate-600 hover:underline"
+          onClick={() => mutation.reset()}
+          type="button"
+        >
+          Push again
+        </button>
+      </div>
+    )
+  }
+
+  if (mutation.isError) {
+    return (
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-800">
+          ✗ {mutation.error.message}
+        </span>
+        <button
+          className="text-xs text-slate-400 hover:text-slate-600 hover:underline"
+          onClick={() => mutation.reset()}
+          type="button"
+        >
+          Try again
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      className={[
+        "shrink-0 rounded-md px-4 py-2 text-sm font-semibold transition-colors",
+        mutation.isPending
+          ? "cursor-not-allowed bg-slate-100 text-slate-400"
+          : hasDebrief
+            ? "bg-trail-strava text-white hover:opacity-90"
+            : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+      ].join(" ")}
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate()}
+      type="button"
+      title={hasDebrief ? "Write AI coaching summary to Strava description" : "No debrief yet — metrics needed first"}
+    >
+      {mutation.isPending ? "Pushing…" : "Push to Strava"}
+    </button>
   )
 }
 

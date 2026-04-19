@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.activity import Activity
 from app.models.metrics import ActivityMetrics
+from app.services.activity_ingestion import push_description_for_activity
+from app.services.strava_client import StravaClient
+from app.services.token_service import get_token_service
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
@@ -67,6 +70,21 @@ async def list_activities(
         .limit(50)
     )
     return [activity_list_out(activity) for activity in result.scalars().all()]
+
+
+@router.post("/{activity_id}/push-description")
+async def push_description(
+    activity_id: int, db: AsyncSession = Depends(get_db)
+) -> dict[str, str]:
+    description = await push_description_for_activity(
+        session=db,
+        activity_id=activity_id,
+        client=StravaClient(),
+        token_service=get_token_service(),
+    )
+    if description is None:
+        raise HTTPException(status_code=422, detail="Cannot generate description: activity has no metrics or debrief")
+    return {"description": description}
 
 
 @router.get("/{activity_id}", response_model=ActivityResponse)

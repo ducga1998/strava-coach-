@@ -132,6 +132,10 @@ export interface AthleteProfileInfo {
   vo2max_estimate: number | null
 }
 
+export interface PushDescriptionResponse {
+  description: string
+}
+
 export interface AthleteInfo {
   id: number
   strava_athlete_id: number

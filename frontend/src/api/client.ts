@@ -9,6 +9,7 @@ import type {
   AthleteInfo,
   DashboardLoadResponse,
   OnboardingProfilePayload,
+  PushDescriptionResponse,
   RaceTarget,
   RaceTargetPayload,
   RaceTargetUpdatePayload,
@@ -81,6 +82,12 @@ export async function getActivityDetail(
   activityId: number,
 ): Promise<ActivityDetailResponse> {
   return request(api.get(`/activities/${activityId}`))
+}
+
+export async function pushActivityDescription(
+  activityId: number,
+): Promise<PushDescriptionResponse> {
+  return request(api.post(`/activities/${activityId}/push-description`))
 }
 
 export async function saveOnboardingProfile(

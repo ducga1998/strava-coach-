@@ -388,6 +388,54 @@ async def _persist_activity(session: AsyncSession, activity: Activity) -> None:
     await session.flush()
 
 
+async def push_description_for_activity(
+    session: AsyncSession,
+    activity_id: int,
+    client: StravaClientProtocol,
+    token_service: TokenService,
+) -> str | None:
+    result = await session.execute(select(Activity).where(Activity.id == activity_id))
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        return None
+
+    if activity.debrief is None and _should_compute_metrics(activity):
+        await process_activity_metrics(session, activity)
+        await session.refresh(activity)
+
+    if activity.debrief is None:
+        return None
+
+    credential = await _find_credential(session, activity.athlete_id)
+    if credential is None:
+        return None
+
+    token = await _get_valid_token(session, credential, client, token_service)
+
+    metrics_result = await session.execute(
+        select(ActivityMetrics).where(ActivityMetrics.activity_id == activity_id)
+    )
+    metrics = metrics_result.scalar_one_or_none()
+    load = await _latest_load(session, activity.athlete_id)
+    acwr = load.acwr if load else 1.0
+    z2_pct = float((metrics.zone_distribution or {}).get("z2_pct", 0.0)) if metrics else 0.0
+
+    description = format_strava_description(
+        tss=metrics.hr_tss or 0.0 if metrics else 0.0,
+        acwr=acwr,
+        z2_pct=z2_pct,
+        hr_drift_pct=metrics.hr_drift_pct or 0.0 if metrics else 0.0,
+        decoupling_pct=metrics.aerobic_decoupling_pct or 0.0 if metrics else 0.0,
+        next_action=str(activity.debrief.get("next_session_action", "")),
+        deep_dive_url=(
+            f"{settings.frontend_url}/activities/{activity.id}"
+            f"?athlete_id={activity.athlete_id}"
+        ),
+    )
+    await client.update_activity_description(token, activity.strava_activity_id, description)
+    return description
+
+
 async def delete_activity(session: AsyncSession, strava_activity_id: int) -> None:
     activity = await _find_activity(session, strava_activity_id)
     if activity is None:
