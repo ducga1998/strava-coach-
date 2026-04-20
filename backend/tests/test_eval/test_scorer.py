@@ -169,3 +169,26 @@ def test_actionability_vague() -> None:
 def test_actionability_vietnamese_duration() -> None:
     debrief = {"next_session_action": "Chạy 75 phút Z2, giữ HR dưới LTHR.", "load_verdict": "", "technical_insight": "", "nutrition_protocol": "", "vmm_projection": ""}
     assert score_actionability(debrief) == 3
+
+
+from eval.scorer import DeterministicScores, score_deterministic
+from eval.fixtures import F2
+
+
+def test_score_deterministic_full_pass() -> None:
+    debrief = {
+        "load_verdict": "TSS 110 over 78 avg. ACWR 1.4 → caution.",
+        "technical_insight": "HR drift 9%. Z3 40% — junk miles.",
+        "next_session_action": "60 min Z2, HR < LTHR-15.",
+        "nutrition_protocol": "TSS 110 = 660 kcal. 4:1 ratio: 80g carb + 20g protein in 30 phút.",
+        "vmm_projection": "VMM 160km: 20h30m (trained).",
+    }
+    scores = score_deterministic(debrief, F2)
+    assert isinstance(scores, DeterministicScores)
+    assert scores.specificity == 3
+    assert scores.no_generics == 3
+    assert scores.acwr_band == 3
+    assert scores.nutrition_ratio == 3
+    assert scores.vmm_math == 3
+    assert scores.actionability == 3
+    assert scores.total == 18

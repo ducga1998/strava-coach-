@@ -1,5 +1,8 @@
 """Deterministic scorers for debrief output. Each returns 0-3."""
 import re
+from dataclasses import dataclass
+
+from eval.fixtures import Fixture
 
 _FIELDS = ("load_verdict", "technical_insight", "next_session_action", "nutrition_protocol", "vmm_projection")
 _HAS_DIGIT = re.compile(r"\d")
@@ -95,3 +98,31 @@ def score_actionability(debrief: dict[str, str]) -> int:
     if _HR_CUE.search(text):
         points += 1
     return points
+
+
+@dataclass(frozen=True)
+class DeterministicScores:
+    specificity: int
+    no_generics: int
+    acwr_band: int
+    nutrition_ratio: int
+    vmm_math: int
+    actionability: int
+
+    @property
+    def total(self) -> int:
+        return (
+            self.specificity + self.no_generics + self.acwr_band
+            + self.nutrition_ratio + self.vmm_math + self.actionability
+        )
+
+
+def score_deterministic(debrief: dict[str, str], fixture: Fixture) -> DeterministicScores:
+    return DeterministicScores(
+        specificity=score_specificity(debrief),
+        no_generics=score_no_generics(debrief),
+        acwr_band=score_acwr_band(debrief, fixture.expected_signals["acwr_band"]),
+        nutrition_ratio=score_nutrition_ratio(debrief, fixture.activity.tss),
+        vmm_math=score_vmm_math(debrief, fixture.context.ctl, fixture.context.threshold_pace_sec_km),
+        actionability=score_actionability(debrief),
+    )
