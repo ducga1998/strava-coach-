@@ -37,7 +37,7 @@ Strava activity description (auto-pushed after ingestion)
 
 Public Feedback page (frontend)
     ├─ Route: /feedback/:activityId
-    ├─ Layout: mobile-first, warm conversational tone (Vietnamese primary)
+    ├─ Layout: mobile-first, warm conversational tone (Vietnamese copy only — no i18n at MVP)
     ├─ Form: thumb up/down + optional comment
     └─ Submits to POST /feedback
 
@@ -112,7 +112,7 @@ Request body:
 Validation:
 - `thumb` must be `"up"` or `"down"` (Pydantic literal).
 - `comment` is optional, max 2000 chars, leading/trailing whitespace stripped. Plain text — no HTML rendering anywhere in the UI, so no sanitizer needed beyond length.
-- `activity_id` must exist **and** belong to `athlete_id`. On mismatch return `404` (do not distinguish "not found" from "not yours" — do not leak existence of other activities).
+- `activity_id` must exist **and** belong to `athlete_id`. Both of these conditions — activity missing, athlete missing, or the pair not matching — return `404` with the same message. Do not leak which one failed.
 
 Response: `201 Created`
 ```json
@@ -137,7 +137,7 @@ The `strava_activity_id` is included so the "submitted" confirmation can offer a
 
 **`GET /admin/feedback?thumb=up|down&unread=true&cursor=<last_id>`**
 
-All query params optional. Cursor-based pagination, 20 per page (ordered by `created_at DESC, id DESC`).
+All query params optional. Cursor-based pagination, 20 per page. Rows ordered by `id DESC` — `id` is `SERIAL`, monotonic, and equivalent to "most recent first" for this table (no backfill inserts). The `cursor` param is the `id` of the last item in the previous page; the query becomes `WHERE id < :cursor ORDER BY id DESC LIMIT 20`. `next_cursor` is the `id` of the last item returned, or `null` when fewer than 20 rows come back.
 
 Response:
 ```json
@@ -169,26 +169,31 @@ Sets `read_at = now()` if null. Idempotent. Response: `204`.
 
 ### Testing
 
-Backend tests in `backend/tests/test_routers/`:
+Backend tests:
 
-- `test_feedback.py`
+- `backend/tests/test_routers/test_feedback.py` (new)
   - `POST` happy path → 201 and DB row.
   - `POST` invalid thumb → 422.
   - `POST` comment > 2000 chars → 422.
   - `POST` `activity_id` does not belong to `athlete_id` → 404.
   - `POST` nonexistent activity → 404.
+  - `POST` nonexistent athlete → 404 (same error body as above).
   - Two consecutive submits → two rows (no dedupe).
   - `GET /feedback/activity/{id}` no existing feedback → 200 with `existing: null`.
   - `GET /feedback/activity/{id}` with existing → 200 returns most recent.
 
-- `test_admin_feedback.py`
+- `backend/tests/test_routers/test_admin_feedback.py` (new)
   - `GET /admin/feedback` unauthenticated → 401.
   - Authenticated GET with each filter combination (`thumb`, `unread`, none) returns correct items.
-  - Cursor pagination returns correct `next_cursor` and empty on last page.
+  - Cursor pagination returns correct `next_cursor` on first page and `null` on last page.
   - `PATCH .../read` sets `read_at`, is idempotent on second call.
   - `GET /admin/feedback/counts` returns accurate counts.
 
-- `test_description_builder.py` — rewrite existing line-index assertions to content-contain assertions; add a test that `feedback_url` appears in the output and is on its own line.
+- `backend/tests/test_services/test_description_builder.py` (existing — rewrite)
+  - Replace existing line-index assertions with content-contain assertions.
+  - Add a test that `feedback_url` appears in the output, on its own line, after the divider.
+  - Add a test that the divider line is present between links and the content above.
+  - Add a test that the coaching block is omitted entirely when both `nutrition_protocol` and `vmm_projection` are empty (no double blank line).
 
 ---
 
