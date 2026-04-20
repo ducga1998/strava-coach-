@@ -145,6 +145,12 @@ async def process_activity_metrics(session: AsyncSession, activity: Activity) ->
     profile = await _find_profile(session, activity.athlete_id)
     metrics, values = _compute_metrics(activity, profile)
     context = await _build_athlete_context(session, activity.athlete_id, profile)
+    # Drop any existing metrics row so reprocessing (e.g. admin-triggered
+    # regenerate, or a webhook replay) doesn't hit the unique constraint on
+    # activity_metrics.activity_id. Flush to guarantee the DELETE reaches the
+    # DB before the subsequent INSERT below.
+    await _delete_metrics(session, activity.id)
+    await session.flush()
     session.add(metrics)
     activity.debrief = await _generate_debrief(activity, context, values)
     activity.processing_status = "done"
