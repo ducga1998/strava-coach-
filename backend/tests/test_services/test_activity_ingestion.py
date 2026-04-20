@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.activity import Activity
 from app.models.athlete import Athlete
 from app.models.metrics import ActivityMetrics
-from app.services.activity_ingestion import _persist_activity, _push_description
+from app.services.activity_ingestion import (
+    _persist_activity,
+    _push_description,
+    process_activity_metrics,
+)
 
 
 def _mock_activity(debrief: dict | None = None, *, strava_id: int = 12345) -> MagicMock:
@@ -163,5 +167,64 @@ def test_persist_activity_clears_existing_metrics_for_recompute(
             select(ActivityMetrics).where(ActivityMetrics.activity_id == 1)
         )
         assert metrics is None
+
+    asyncio.run(run())
+
+
+def test_process_activity_metrics_is_idempotent_when_metrics_already_exist(
+    db_session: AsyncSession,
+) -> None:
+    """Re-running the pipeline on a processed activity must not blow up on
+    the activity_metrics.activity_id unique constraint."""
+
+    async def run() -> None:
+        db_session.add(Athlete(id=1, strava_athlete_id=1001))
+        activity = Activity(
+            id=1,
+            athlete_id=1,
+            strava_activity_id=12345,
+            sport_type="Run",
+            elapsed_time_sec=3600,
+            distance_m=10000.0,
+            streams_raw={"heartrate": [150] * 60, "time": list(range(60))},
+        )
+        db_session.add(activity)
+        db_session.add(
+            ActivityMetrics(activity_id=1, athlete_id=1, tss=20.0)
+        )
+        await db_session.commit()
+
+        fresh_metrics = ActivityMetrics(
+            activity_id=1, athlete_id=1, tss=80.0, hr_tss=80.0
+        )
+        fresh_debrief = {
+            "load_verdict": "vx",
+            "technical_insight": "vy",
+            "next_session_action": "vz",
+        }
+
+        with patch(
+            "app.services.activity_ingestion._compute_metrics",
+            return_value=(fresh_metrics, {"hr_drift_pct": 4.0}),
+        ), patch(
+            "app.services.activity_ingestion._build_athlete_context",
+            AsyncMock(return_value=MagicMock()),
+        ), patch(
+            "app.services.activity_ingestion._generate_debrief",
+            AsyncMock(return_value=fresh_debrief),
+        ):
+            # Would raise UniqueViolationError on the unique
+            # ix_activity_metrics_activity_id constraint before the fix.
+            await process_activity_metrics(db_session, activity)
+
+        rows = (
+            await db_session.execute(
+                select(ActivityMetrics).where(ActivityMetrics.activity_id == 1)
+            )
+        ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].tss == 80.0
+        assert activity.debrief == fresh_debrief
+        assert activity.processing_status == "done"
 
     asyncio.run(run())
