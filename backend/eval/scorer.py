@@ -36,3 +36,9 @@ def score_acwr_band(debrief: dict[str, str], expected_band: str) -> int:
     text = debrief.get("load_verdict", "").lower()
     aliases = _BAND_ALIASES.get(expected_band, (expected_band,))
     return 3 if any(alias in text for alias in aliases) else 0
+
+
+def score_nutrition_ratio(debrief: dict[str, str], tss: float) -> int:
+    expected = "4:1" if tss >= 100 else "3:1"
+    text = debrief.get("nutrition_protocol", "")
+    return 3 if expected in text else 0

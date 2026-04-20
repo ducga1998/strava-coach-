@@ -91,3 +91,26 @@ def test_acwr_band_wrong_label() -> None:
 def test_acwr_band_injury_risk_alias() -> None:
     debrief = {"load_verdict": "ACWR 1.6 — danger zone today.", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "", "vmm_projection": ""}
     assert score_acwr_band(debrief, expected_band="injury risk") == 3
+
+
+from eval.scorer import score_nutrition_ratio
+
+
+def test_nutrition_ratio_4to1_for_high_tss() -> None:
+    debrief = {"load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "Tỷ lệ 4:1 carb:protein. 80g carb + 20g protein.", "vmm_projection": ""}
+    assert score_nutrition_ratio(debrief, tss=120) == 3
+
+
+def test_nutrition_ratio_3to1_for_low_tss() -> None:
+    debrief = {"load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "3:1 ratio: 45g carb + 15g protein.", "vmm_projection": ""}
+    assert score_nutrition_ratio(debrief, tss=50) == 3
+
+
+def test_nutrition_ratio_wrong_for_high_tss() -> None:
+    debrief = {"load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "3:1 ratio works fine.", "vmm_projection": ""}
+    assert score_nutrition_ratio(debrief, tss=120) == 0
+
+
+def test_nutrition_ratio_missing_pattern() -> None:
+    debrief = {"load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "Eat phở and drink water.", "vmm_projection": ""}
+    assert score_nutrition_ratio(debrief, tss=50) == 0
