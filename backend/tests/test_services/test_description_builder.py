@@ -1,4 +1,8 @@
-from app.services.description_builder import acwr_zone_label, format_strava_description
+from app.services.description_builder import (
+    MAX_DESCRIPTION_CHARS,
+    acwr_zone_label,
+    format_strava_description,
+)
 
 
 def test_acwr_zone_label_underload() -> None:
@@ -94,3 +98,56 @@ def test_format_strava_description_injury_risk_zone() -> None:
         next_action="Recovery Z1", deep_dive_url="http://app/a/2",
     )
     assert "(injury risk)" in result
+
+
+def test_format_strava_description_tolerates_none_metrics() -> None:
+    """A new caller passing None for any numeric metric must not TypeError."""
+    result = format_strava_description(
+        tss=None,
+        acwr=None,
+        z2_pct=None,
+        hr_drift_pct=None,
+        decoupling_pct=None,
+        next_action="Easy Z2",
+        deep_dive_url="http://app/a/1",
+    )
+    assert "TSS 0" in result
+    assert "ACWR 0.00" in result
+    assert "(underload)" in result  # acwr 0.0 is below 0.8
+
+
+def test_format_strava_description_truncates_when_too_long() -> None:
+    """LLM output that blows past Strava's 4096-char limit must be truncated,
+    keep the trailing deep-dive URL intact, and stay under the cap."""
+    long_vmm = "x" * 5000  # would blow past the cap on its own
+    url = "https://app.example.com/activities/42?athlete_id=1"
+    result = format_strava_description(
+        tss=100.0,
+        acwr=1.0,
+        z2_pct=60.0,
+        hr_drift_pct=3.0,
+        decoupling_pct=3.0,
+        next_action="Easy Z2",
+        deep_dive_url=url,
+        vmm_projection=long_vmm,
+    )
+    assert len(result) <= MAX_DESCRIPTION_CHARS
+    # Trailing URL line survives truncation so users can still click through.
+    assert result.endswith(f"🔍 {url}")
+    # Ellipsis marker appears before the URL line to signal truncation.
+    assert "…" in result
+
+
+def test_format_strava_description_under_limit_unchanged() -> None:
+    """Short outputs must not be altered by the truncation path."""
+    result = format_strava_description(
+        tss=50.0,
+        acwr=1.0,
+        z2_pct=70.0,
+        hr_drift_pct=2.0,
+        decoupling_pct=1.5,
+        next_action="Easy Z2",
+        deep_dive_url="http://app/a/1",
+    )
+    assert "…" not in result
+    assert len(result) < MAX_DESCRIPTION_CHARS
