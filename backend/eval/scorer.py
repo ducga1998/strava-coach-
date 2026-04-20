@@ -14,3 +14,11 @@ def score_specificity(debrief: dict[str, str]) -> int:
     if fields_with_numbers == 3:
         return 1
     return 0
+
+
+_GENERIC_PHRASES = ("great job", "keep it up", "listen to your body")
+
+
+def score_no_generics(debrief: dict[str, str]) -> int:
+    combined = " ".join(debrief.get(f, "") for f in _FIELDS).lower()
+    return 0 if any(phrase in combined for phrase in _GENERIC_PHRASES) else 3
