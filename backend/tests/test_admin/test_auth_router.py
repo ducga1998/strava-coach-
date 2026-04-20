@@ -80,3 +80,34 @@ def test_login_disabled_admin_rejected(
         json={"email": "alice@example.com", "password": "correctpassword"},
     )
     assert response.status_code == 401
+
+
+def _login(client: TestClient) -> None:
+    r = client.post(
+        "/admin/auth/login",
+        json={"email": "alice@example.com", "password": "correctpassword"},
+    )
+    assert r.status_code == 200
+
+
+def test_me_without_cookie_returns_401(client: TestClient) -> None:
+    assert client.get("/admin/auth/me").status_code == 401
+
+
+def test_me_returns_current_admin(client: TestClient, seed_admin: Admin) -> None:
+    _login(client)
+    response = client.get("/admin/auth/me")
+    assert response.status_code == 200
+    assert response.json()["email"] == "alice@example.com"
+
+
+def test_logout_revokes_session(client: TestClient, seed_admin: Admin) -> None:
+    _login(client)
+    response = client.post("/admin/auth/logout")
+    assert response.status_code == 204
+    # Subsequent /me should now 401
+    assert client.get("/admin/auth/me").status_code == 401
+
+
+def test_logout_without_cookie_is_noop(client: TestClient) -> None:
+    assert client.post("/admin/auth/logout").status_code == 204

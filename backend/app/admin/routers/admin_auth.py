@@ -56,3 +56,23 @@ async def login(
         **_cookie_kwargs(),
     )
     return MeResponse(id=admin.id, email=admin.email, name=admin.name)
+
+
+@router.get("/me", response_model=MeResponse)
+async def me(admin: Admin = Depends(admin_auth.require_admin)) -> MeResponse:
+    return MeResponse(id=admin.id, email=admin.email, name=admin.name)
+
+
+@router.post("/logout", status_code=204)
+async def logout(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    raw = request.cookies.get(admin_auth.SESSION_COOKIE_NAME)
+    if raw:
+        await admin_auth.revoke_session(db, raw)
+        await db.commit()
+    response.delete_cookie(admin_auth.SESSION_COOKIE_NAME, path="/admin")
+    response.status_code = 204
+    return response
