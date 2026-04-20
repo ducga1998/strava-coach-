@@ -163,3 +163,65 @@ def test_change_password_rejects_too_short(
         json={"current": "correctpassword", "new": "short"},
     )
     assert response.status_code == 422
+
+
+def test_login_constant_time_on_unknown_email(
+    client: TestClient, seed_admin: Admin
+) -> None:
+    """Unknown-email path also runs verify_password (for timing uniformity)."""
+    import time
+    # Measure a wrong-password response (admin exists, argon2 runs)
+    t0 = time.monotonic()
+    client.post(
+        "/admin/auth/login",
+        json={"email": "alice@example.com", "password": "wrong-password-x"},
+    )
+    dt_wrong_pw = time.monotonic() - t0
+    # Measure an unknown-email response
+    t0 = time.monotonic()
+    client.post(
+        "/admin/auth/login",
+        json={"email": "nobody@example.com", "password": "wrong-password-x"},
+    )
+    dt_unknown = time.monotonic() - t0
+    # Both should be in the same order of magnitude (argon2 dominates both).
+    # We don't assert exact parity — just that the unknown path didn't short-circuit.
+    assert dt_unknown > 0.005, (
+        f"unknown-email path too fast ({dt_unknown:.3f}s) — "
+        "timing-attack mitigation not running"
+    )
+
+
+def test_change_password_revokes_other_sessions(
+    client: TestClient, seed_admin: Admin
+) -> None:
+    """Changing the password must kill existing sessions from other clients."""
+    # Session A: the one changing the password
+    client.post(
+        "/admin/auth/login",
+        json={"email": "alice@example.com", "password": "correctpassword"},
+    )
+
+    # Session B: a second TestClient simulating another device
+    from fastapi.testclient import TestClient as TC
+    from app.main import app
+    client_b = TC(app)
+    # Share the same DB via dependency_overrides already set
+    r = client_b.post(
+        "/admin/auth/login",
+        json={"email": "alice@example.com", "password": "correctpassword"},
+    )
+    assert r.status_code == 200
+    assert client_b.get("/admin/auth/me").status_code == 200  # live
+
+    # Client A changes the password
+    r = client.post(
+        "/admin/auth/change-password",
+        json={"current": "correctpassword", "new": "brand-new-12chars"},
+    )
+    assert r.status_code == 204
+
+    # Client B's session is now dead
+    assert client_b.get("/admin/auth/me").status_code == 401
+    # Client A's session is re-issued and still live
+    assert client.get("/admin/auth/me").status_code == 200
