@@ -177,6 +177,10 @@ async def _push_description(
         load = await _latest_load(session, activity.athlete_id)
         acwr = load.acwr if load else 1.0
         z2_pct = float((metrics.zone_distribution or {}).get("z2_pct", 0.0))
+        feedback_url = (
+            f"{settings.frontend_url}/feedback/{activity.id}"
+            f"?athlete_id={activity.athlete_id}"
+        )
         description = format_strava_description(
             tss=metrics.hr_tss or 0.0,
             acwr=acwr,
@@ -188,6 +192,7 @@ async def _push_description(
                 f"{settings.frontend_url}/activities/{activity.id}"
                 f"?athlete_id={activity.athlete_id}"
             ),
+            feedback_url=feedback_url,
             nutrition_protocol=str(activity.debrief.get("nutrition_protocol", "")),
             vmm_projection=str(activity.debrief.get("vmm_projection", "")),
         )
@@ -434,6 +439,10 @@ async def push_description_for_activity(
     acwr = load.acwr if load else 1.0
     z2_pct = float((metrics.zone_distribution or {}).get("z2_pct", 0.0)) if metrics else 0.0
 
+    feedback_url = (
+        f"{settings.frontend_url}/feedback/{activity.id}"
+        f"?athlete_id={activity.athlete_id}"
+    )
     description = format_strava_description(
         tss=metrics.hr_tss or 0.0 if metrics else 0.0,
         acwr=acwr,
@@ -445,6 +454,7 @@ async def push_description_for_activity(
             f"{settings.frontend_url}/activities/{activity.id}"
             f"?athlete_id={activity.athlete_id}"
         ),
+        feedback_url=feedback_url,
         nutrition_protocol=str(activity.debrief.get("nutrition_protocol", "")),
         vmm_projection=str(activity.debrief.get("vmm_projection", "")),
     )
