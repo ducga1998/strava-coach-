@@ -32,7 +32,10 @@ def test_generate_session_token_is_urlsafe_and_unique() -> None:
 
 
 def test_hash_token_is_deterministic_hex_sha256() -> None:
+    import hashlib
     t = "some-session-token"
+    expected = hashlib.sha256(t.encode("utf-8")).hexdigest()
+    assert admin_auth.hash_token(t) == expected
     assert admin_auth.hash_token(t) == admin_auth.hash_token(t)
     assert len(admin_auth.hash_token(t)) == 64
 

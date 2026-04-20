@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
+from argon2.exceptions import VerificationError
 from fastapi import Cookie, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ def verify_password(hashed: str, password: str) -> bool:
     try:
         _hasher.verify(hashed, password)
         return True
-    except VerifyMismatchError:
+    except VerificationError:
         return False
 
 
@@ -42,6 +42,9 @@ async def create_session(
     lifetime_days: int,
     user_agent: str | None = None,
 ) -> str:
+    """Create a new admin session row. FLUSHES but does not COMMIT — the
+    caller is responsible for the surrounding transaction. Returns the raw
+    session token; store only the sha256 (already persisted here)."""
     raw = generate_session_token()
     session = AdminSession(
         admin_id=admin.id,
@@ -73,6 +76,8 @@ async def lookup_admin_by_session(db: AsyncSession, raw_token: str) -> Admin | N
 
 
 async def revoke_session(db: AsyncSession, raw_token: str) -> None:
+    """Mark the session revoked. FLUSHES but does not COMMIT — caller owns
+    the transaction."""
     row = (
         await db.execute(
             select(AdminSession).where(AdminSession.token_hash == hash_token(raw_token))
