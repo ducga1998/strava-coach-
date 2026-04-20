@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import time
 from dataclasses import dataclass
@@ -196,9 +197,17 @@ async def _push_description(
             nutrition_protocol=str(activity.debrief.get("nutrition_protocol", "")),
             vmm_projection=str(activity.debrief.get("vmm_projection", "")),
         )
+        # Our own PUT triggers a Strava update webhook → re-ingestion →
+        # recomputed description. If the text is identical to what we last
+        # pushed, skip the PUT so we don't kick off another webhook event
+        # and burn 2 more reads (plus LLM $) for nothing.
+        new_hash = hashlib.sha256(description.encode("utf-8")).hexdigest()
+        if activity.description_pushed_hash == new_hash:
+            return
         await client.update_activity_description(
             access_token, activity.strava_activity_id, description
         )
+        activity.description_pushed_hash = new_hash
     except Exception:
         logger.warning(
             "failed to push description to Strava for activity %s",

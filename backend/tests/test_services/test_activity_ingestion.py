@@ -15,12 +15,18 @@ from app.services.activity_ingestion import (
 )
 
 
-def _mock_activity(debrief: dict | None = None, *, strava_id: int = 12345) -> MagicMock:
+def _mock_activity(
+    debrief: dict | None = None,
+    *,
+    strava_id: int = 12345,
+    description_pushed_hash: str | None = None,
+) -> MagicMock:
     activity = MagicMock()
     activity.id = 1
     activity.strava_activity_id = strava_id
     activity.athlete_id = 1
     activity.debrief = debrief
+    activity.description_pushed_hash = description_pushed_hash
     return activity
 
 
@@ -89,6 +95,64 @@ def test_push_description_calls_client_with_formatted_text() -> None:
         assert "TSS 72" in description
         assert "VMM 8w: easy trail" in description
         assert "http://localhost:5173/activities/1" in description
+
+    asyncio.run(run())
+
+
+def test_push_description_skips_put_when_hash_unchanged() -> None:
+    """Breaks the webhook-update → re-push → webhook-update loop that
+    blew our Strava daily read quota. If the computed description matches
+    what we last pushed (hash recorded on the activity row), skip the PUT —
+    no new update event, no re-ingest, loop dies."""
+
+    async def run() -> None:
+        activity = _mock_activity(
+            debrief={"next_session_action": "VMM 8w: easy trail"},
+        )
+        session = _mock_session(metrics=_mock_metrics(), load=None)
+        mock_client = AsyncMock()
+        with patch("app.services.activity_ingestion.settings") as s:
+            s.strava_push_description = True
+            s.frontend_url = "http://localhost:5173"
+            # First push: computes description, PUTs, stores hash on activity
+            await _push_description(session, activity, mock_client, "tok")
+        assert mock_client.update_activity_description.call_count == 1
+        first_hash = activity.description_pushed_hash
+        assert first_hash, "hash must be recorded after a push"
+
+        # Second ingest (simulating our PUT triggering Strava to re-fire the
+        # update event → webhook → enqueue_activity → re-compute description
+        # with identical inputs). Re-create a fresh session/client and verify
+        # we DO NOT PUT again.
+        session2 = _mock_session(metrics=_mock_metrics(), load=None)
+        mock_client2 = AsyncMock()
+        with patch("app.services.activity_ingestion.settings") as s:
+            s.strava_push_description = True
+            s.frontend_url = "http://localhost:5173"
+            await _push_description(session2, activity, mock_client2, "tok")
+        mock_client2.update_activity_description.assert_not_called()
+        assert activity.description_pushed_hash == first_hash
+
+    asyncio.run(run())
+
+
+def test_push_description_puts_when_hash_differs() -> None:
+    """If the description changes (new debrief text, updated metrics, …),
+    we still push — the guard must only skip true no-ops."""
+
+    async def run() -> None:
+        activity = _mock_activity(
+            debrief={"next_session_action": "Tempo 6km"},
+            description_pushed_hash="stale-hash-from-previous-content",
+        )
+        session = _mock_session(metrics=_mock_metrics(), load=None)
+        mock_client = AsyncMock()
+        with patch("app.services.activity_ingestion.settings") as s:
+            s.strava_push_description = True
+            s.frontend_url = "http://localhost:5173"
+            await _push_description(session, activity, mock_client, "tok")
+        mock_client.update_activity_description.assert_called_once()
+        assert activity.description_pushed_hash != "stale-hash-from-previous-content"
 
     asyncio.run(run())
 

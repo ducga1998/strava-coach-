@@ -37,6 +37,10 @@ class Activity(Base):
     skipped_reason: Mapped[str | None] = mapped_column(String(100))
     processing_status: Mapped[str] = mapped_column(String(50), default="pending")
     retry_count: Mapped[int] = mapped_column(default=0)
+    # Hash of the last description text we PUT to Strava. Used to break the
+    # our-PUT → Strava-update-webhook → re-ingest → re-PUT loop that blew
+    # our daily read quota. See _push_description.
+    description_pushed_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
