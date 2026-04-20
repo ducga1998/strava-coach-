@@ -154,3 +154,24 @@ export interface AthleteInfo {
   country: string | null
   profile: AthleteProfileInfo | null
 }
+
+export type FeedbackThumb = "up" | "down"
+
+export interface FeedbackItem {
+  id: number
+  thumb: FeedbackThumb
+  comment: string | null
+  created_at: string
+}
+
+export interface FeedbackCreateRequest {
+  activity_id: number
+  athlete_id: number
+  thumb: FeedbackThumb
+  comment?: string
+}
+
+export interface ExistingFeedbackResponse {
+  existing: FeedbackItem | null
+  strava_activity_id: number
+}
