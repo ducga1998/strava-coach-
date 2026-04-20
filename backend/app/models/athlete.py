@@ -35,6 +35,7 @@ class Athlete(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     profile: Mapped["AthleteProfile | None"] = relationship(
         back_populates="athlete", cascade="all, delete-orphan"
