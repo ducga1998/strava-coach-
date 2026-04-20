@@ -12,6 +12,23 @@ import app.models  # noqa: F401
 import app.admin.models  # noqa: F401
 from app.database import Base, get_db
 from app.main import app
+from app.services import webhook_subscription as _ws
+
+
+@pytest.fixture(autouse=True)
+def _skip_strava_webhook_registration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tests that boot the FastAPI app must not call Strava on startup.
+
+    Without this, every TestClient(app) triggers ensure_webhook_subscription
+    → hits the real API → 429 retry loop → tests run for minutes.
+    """
+
+    async def _fake_ensure() -> _ws.SubscriptionStatus:
+        return _ws.SubscriptionStatus(state="skipped", reason="test harness")
+
+    monkeypatch.setattr("app.main.ensure_webhook_subscription", _fake_ensure)
 
 SessionMaker: TypeAlias = async_sessionmaker[AsyncSession]
 

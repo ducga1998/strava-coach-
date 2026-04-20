@@ -9,12 +9,15 @@ from app.config import settings
 from app.routers import (
     activities, athletes, auth, dashboard, feedback, onboarding, targets, webhook,
 )
-from app.services.webhook_subscription import ensure_webhook_subscription
+from app.services.webhook_subscription import (
+    UNKNOWN_STATUS,
+    ensure_webhook_subscription,
+)
 
 
 @asynccontextmanager
 async def lifespan(api: FastAPI) -> AsyncGenerator[None, None]:
-    await ensure_webhook_subscription()
+    api.state.webhook_subscription = await ensure_webhook_subscription()
     yield
 
 
@@ -70,5 +73,15 @@ app = create_app()
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health() -> dict[str, object]:
+    sub = getattr(app.state, "webhook_subscription", UNKNOWN_STATUS)
+    return {
+        "status": "ok",
+        "webhook": {
+            "state": sub.state,
+            "subscription_id": sub.subscription_id,
+            "callback_url": sub.callback_url,
+            "reason": sub.reason,
+            "error": sub.error,
+        },
+    }
