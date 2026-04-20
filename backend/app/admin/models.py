@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -127,7 +126,7 @@ class DebriefRating(Base):
     debrief_run_id: Mapped[int] = mapped_column(
         ForeignKey("debrief_runs.id", ondelete="CASCADE"), primary_key=True
     )
-    admin_id: Mapped[int] = mapped_column(
+    admin_id: Mapped[int | None] = mapped_column(
         ForeignKey("admins.id", ondelete="SET NULL"), nullable=True
     )
     thumb: Mapped[Thumb] = mapped_column(Enum(Thumb, name="thumb"), nullable=False)
