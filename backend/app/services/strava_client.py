@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import time
 from collections.abc import Mapping
 from typing import NotRequired, Protocol, TypedDict, cast
@@ -8,10 +10,30 @@ import httpx
 from app.config import settings
 
 
+logger = logging.getLogger(__name__)
+
 STRAVA_BASE_URL = "https://www.strava.com/api/v3"
 STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
 STREAM_KEYS = "heartrate,altitude,velocity_smooth,time,latlng,cadence,watts"
+
+# 429 retry policy. 4 attempts with capped exponential backoff covers the
+# common case of a short-window burst (15-min limit). A persistent daily-cap
+# 429 will still surface as HTTPStatusError after the retries exhaust — that
+# case is not recoverable by waiting minutes.
+_RETRY_MAX_ATTEMPTS = 4
+_RETRY_DEFAULT_BACKOFF_SEC = 5.0
+_RETRY_MAX_BACKOFF_SEC = 60.0
+
+
+def _retry_delay_seconds(response: httpx.Response, attempt: int) -> float:
+    retry_after = response.headers.get("Retry-After")
+    if retry_after:
+        try:
+            return min(float(retry_after), _RETRY_MAX_BACKOFF_SEC)
+        except ValueError:
+            pass
+    return min(_RETRY_DEFAULT_BACKOFF_SEC * (2 ** attempt), _RETRY_MAX_BACKOFF_SEC)
 
 
 class StravaAthletePayload(TypedDict, total=False):
@@ -197,14 +219,34 @@ class StravaClient:
         return response.json()
 
     async def _request(self, method: str, url: str, **kwargs: object) -> httpx.Response:
+        # Retry on 429 up to _RETRY_MAX_ATTEMPTS times, honouring Retry-After
+        # if Strava sends it. Webhook ingestion was silently losing activities
+        # when Strava briefly rate-limited the app (200 req/15min short, or
+        # 1000 reads/day). With this, transient 429 bursts get absorbed; a
+        # hard daily cap still surfaces after the retries exhaust.
+        for attempt in range(_RETRY_MAX_ATTEMPTS):
+            response = await self._send_once(method, url, **kwargs)
+            if response.status_code != 429 or attempt == _RETRY_MAX_ATTEMPTS - 1:
+                response.raise_for_status()
+                return response
+            delay = _retry_delay_seconds(response, attempt)
+            logger.warning(
+                "Strava 429 on %s %s — retry %d/%d in %.1fs",
+                method,
+                url,
+                attempt + 1,
+                _RETRY_MAX_ATTEMPTS - 1,
+                delay,
+            )
+            await asyncio.sleep(delay)
+        response.raise_for_status()  # unreachable but keeps the type checker happy
+        return response
+
+    async def _send_once(self, method: str, url: str, **kwargs: object) -> httpx.Response:
         if self._client is not None:
-            response = await self._client.request(method, url, **kwargs)
-            response.raise_for_status()
-            return response
+            return await self._client.request(method, url, **kwargs)
         async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.request(method, url, **kwargs)
-            response.raise_for_status()
-            return response
+            return await client.request(method, url, **kwargs)
 
     @staticmethod
     def _parse_token_payload(data: object) -> StravaTokenPayload:
