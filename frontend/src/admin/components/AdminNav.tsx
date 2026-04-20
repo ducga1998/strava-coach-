@@ -7,7 +7,12 @@ export default function AdminNav() {
   const navigate = useNavigate()
 
   async function handleLogout() {
-    await logout.mutateAsync()
+    try {
+      await logout.mutateAsync()
+    } catch {
+      // Session may still be alive server-side, but the user clicked logout.
+      // We navigate to login anyway — the session will expire on its own.
+    }
     navigate("/admin/login", { replace: true })
   }
 

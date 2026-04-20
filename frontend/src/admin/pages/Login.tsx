@@ -3,12 +3,13 @@ import { Navigate, useNavigate } from "react-router-dom"
 import { useAdminLogin, useAdminMe } from "../api"
 
 export default function Login() {
-  const { data: me } = useAdminMe()
+  const { data: me, isLoading: meLoading } = useAdminMe()
   const login = useAdminLogin()
   const navigate = useNavigate()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
+  if (meLoading) return null
   if (me) return <Navigate to="/admin" replace />
 
   async function onSubmit(e: FormEvent) {
@@ -33,6 +34,7 @@ export default function Login() {
           <span className="mb-1 block text-sm text-slate-700">Email</span>
           <input
             type="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -45,6 +47,7 @@ export default function Login() {
           <span className="mb-1 block text-sm text-slate-700">Password</span>
           <input
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
