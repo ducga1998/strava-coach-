@@ -78,3 +78,20 @@ def score_vmm_math(debrief: dict[str, str], ctl: float, threshold_pace_sec_km: f
     if delta <= 10:
         return 1
     return 0
+
+
+_DURATION = re.compile(r"\d+\s*(?:min|phút|h\b)", re.IGNORECASE)
+_ZONE = re.compile(r"\bZ[1-5]\b", re.IGNORECASE)
+_HR_CUE = re.compile(r"\b(?:HR|LTHR|bpm)\b", re.IGNORECASE)
+
+
+def score_actionability(debrief: dict[str, str]) -> int:
+    text = debrief.get("next_session_action", "")
+    points = 0
+    if _DURATION.search(text):
+        points += 1
+    if _ZONE.search(text):
+        points += 1
+    if _HR_CUE.search(text):
+        points += 1
+    return points

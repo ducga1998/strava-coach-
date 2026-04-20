@@ -141,3 +141,31 @@ def test_vmm_math_no_time_pattern_zero() -> None:
 def test_vmm_math_extreme_outlier_zero() -> None:
     debrief = {"vmm_projection": "VMM 160km projection: 50h00m.", "load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": ""}
     assert score_vmm_math(debrief, ctl=70, threshold_pace_sec_km=270) == 0
+
+
+from eval.scorer import score_actionability
+
+
+def test_actionability_full_prescription() -> None:
+    debrief = {"next_session_action": "Easy 60 min Z2 run, HR cap LTHR-15.", "load_verdict": "", "technical_insight": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_actionability(debrief) == 3
+
+
+def test_actionability_missing_hr_cue() -> None:
+    debrief = {"next_session_action": "Easy 60 min Z2 run.", "load_verdict": "", "technical_insight": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_actionability(debrief) == 2
+
+
+def test_actionability_only_zone() -> None:
+    debrief = {"next_session_action": "Run in Z2.", "load_verdict": "", "technical_insight": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_actionability(debrief) == 1
+
+
+def test_actionability_vague() -> None:
+    debrief = {"next_session_action": "Recover well.", "load_verdict": "", "technical_insight": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_actionability(debrief) == 0
+
+
+def test_actionability_vietnamese_duration() -> None:
+    debrief = {"next_session_action": "Chạy 75 phút Z2, giữ HR dưới LTHR.", "load_verdict": "", "technical_insight": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_actionability(debrief) == 3
