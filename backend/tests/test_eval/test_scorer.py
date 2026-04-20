@@ -114,3 +114,30 @@ def test_nutrition_ratio_wrong_for_high_tss() -> None:
 def test_nutrition_ratio_missing_pattern() -> None:
     debrief = {"load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "Eat phở and drink water.", "vmm_projection": ""}
     assert score_nutrition_ratio(debrief, tss=50) == 0
+
+
+from eval.scorer import score_vmm_math
+
+
+def test_vmm_math_within_3h_of_formula() -> None:
+    # CTL 70 → multiplier 2.6, threshold_pace 270 sec/km
+    # flat = 160000 / (270*2.6) sec * 60 / 60 = ~228 min = 3.8h flat
+    # + elevation = (10000/10)*60 = 60000 sec = 16.67h
+    # total ≈ 20.4h
+    debrief = {"vmm_projection": "VMM 160km projection: 20h30m (trained).", "load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": ""}
+    assert score_vmm_math(debrief, ctl=70, threshold_pace_sec_km=270) == 3
+
+
+def test_vmm_math_within_6h_partial_credit() -> None:
+    debrief = {"vmm_projection": "VMM 160km projection: 26h00m.", "load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": ""}
+    assert score_vmm_math(debrief, ctl=70, threshold_pace_sec_km=270) == 2
+
+
+def test_vmm_math_no_time_pattern_zero() -> None:
+    debrief = {"vmm_projection": "Insufficient data.", "load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": ""}
+    assert score_vmm_math(debrief, ctl=70, threshold_pace_sec_km=270) == 0
+
+
+def test_vmm_math_extreme_outlier_zero() -> None:
+    debrief = {"vmm_projection": "VMM 160km projection: 50h00m.", "load_verdict": "", "technical_insight": "", "next_session_action": "", "nutrition_protocol": ""}
+    assert score_vmm_math(debrief, ctl=70, threshold_pace_sec_km=270) == 0

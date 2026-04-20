@@ -42,3 +42,39 @@ def score_nutrition_ratio(debrief: dict[str, str], tss: float) -> int:
     expected = "4:1" if tss >= 100 else "3:1"
     text = debrief.get("nutrition_protocol", "")
     return 3 if expected in text else 0
+
+
+_TIME_PATTERN = re.compile(r"(\d+)\s*h\s*(\d+)?\s*m?", re.IGNORECASE)
+
+
+def _expected_vmm_hours(ctl: float, threshold_pace_sec_km: float) -> float:
+    if ctl >= 90:
+        multiplier = 2.4
+    elif ctl >= 70:
+        multiplier = 2.6
+    elif ctl >= 50:
+        multiplier = 2.9
+    else:
+        multiplier = 3.2
+    flat_sec = 160_000 / (threshold_pace_sec_km * multiplier) * 60
+    elevation_sec = (10_000 / 10) * 60
+    return (flat_sec + elevation_sec) / 3600
+
+
+def score_vmm_math(debrief: dict[str, str], ctl: float, threshold_pace_sec_km: float) -> int:
+    text = debrief.get("vmm_projection", "")
+    match = _TIME_PATTERN.search(text)
+    if not match:
+        return 0
+    hours = int(match.group(1))
+    minutes = int(match.group(2)) if match.group(2) else 0
+    actual = hours + minutes / 60
+    expected = _expected_vmm_hours(ctl, threshold_pace_sec_km)
+    delta = abs(actual - expected)
+    if delta <= 3:
+        return 3
+    if delta <= 6:
+        return 2
+    if delta <= 10:
+        return 1
+    return 0
