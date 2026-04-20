@@ -76,3 +76,16 @@ async def logout(
     response.delete_cookie(admin_auth.SESSION_COOKIE_NAME, path="/admin")
     response.status_code = 204
     return response
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    payload: ChangePasswordRequest,
+    admin: Admin = Depends(admin_auth.require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    if not admin_auth.verify_password(admin.password_hash, payload.current):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    admin.password_hash = admin_auth.hash_password(payload.new)
+    await db.commit()
+    return Response(status_code=204)

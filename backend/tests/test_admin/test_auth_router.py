@@ -111,3 +111,55 @@ def test_logout_revokes_session(client: TestClient, seed_admin: Admin) -> None:
 
 def test_logout_without_cookie_is_noop(client: TestClient) -> None:
     assert client.post("/admin/auth/logout").status_code == 204
+
+
+def test_change_password_success(client: TestClient, seed_admin: Admin) -> None:
+    _login(client)
+    response = client.post(
+        "/admin/auth/change-password",
+        json={"current": "correctpassword", "new": "brand-new-12chars"},
+    )
+    assert response.status_code == 204
+    # Old password no longer works
+    client.cookies.clear()
+    r = client.post(
+        "/admin/auth/login",
+        json={"email": "alice@example.com", "password": "correctpassword"},
+    )
+    assert r.status_code == 401
+    # New password works
+    r = client.post(
+        "/admin/auth/login",
+        json={"email": "alice@example.com", "password": "brand-new-12chars"},
+    )
+    assert r.status_code == 200
+
+
+def test_change_password_rejects_wrong_current(
+    client: TestClient, seed_admin: Admin
+) -> None:
+    _login(client)
+    response = client.post(
+        "/admin/auth/change-password",
+        json={"current": "wrong", "new": "brand-new-12chars"},
+    )
+    assert response.status_code == 400
+
+
+def test_change_password_requires_auth(client: TestClient) -> None:
+    response = client.post(
+        "/admin/auth/change-password",
+        json={"current": "x" * 12, "new": "y" * 12},
+    )
+    assert response.status_code == 401
+
+
+def test_change_password_rejects_too_short(
+    client: TestClient, seed_admin: Admin
+) -> None:
+    _login(client)
+    response = client.post(
+        "/admin/auth/change-password",
+        json={"current": "correctpassword", "new": "short"},
+    )
+    assert response.status_code == 422
