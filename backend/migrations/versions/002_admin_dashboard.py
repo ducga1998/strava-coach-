@@ -8,6 +8,7 @@ Create Date: 2026-04-20
 from typing import Sequence, Union
 
 from alembic import op
+from sqlalchemy import text
 
 revision: str = "002_admin_dashboard"
 down_revision: Union[str, None] = "001_athlete_profile"
@@ -129,6 +130,7 @@ def upgrade() -> None:
     """)
     op.execute("CREATE INDEX IF NOT EXISTS ix_admin_sessions_token_hash ON admin_sessions (token_hash)")
     op.execute("CREATE INDEX IF NOT EXISTS ix_admin_sessions_expires_at ON admin_sessions (expires_at)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_admin_sessions_admin_id ON admin_sessions (admin_id)")
 
     op.execute("""
         CREATE TABLE IF NOT EXISTS prompt_versions (
@@ -197,11 +199,24 @@ def upgrade() -> None:
 
     # Seed prompt v1 from the original hardcoded SYSTEM_PROMPT. Safe if re-run:
     # ON CONFLICT (version_number) DO NOTHING.
-    op.execute(f"""
-        INSERT INTO prompt_versions (version_number, name, system_prompt, model, is_active, notes, activated_at)
-        VALUES (1, '{SEED_PROMPT_V1_NAME}', $seed_v1${SEED_PROMPT_V1_BODY}$seed_v1$, '{SEED_PROMPT_V1_MODEL}', TRUE, 'Initial prompt seeded from code.', now())
-        ON CONFLICT (version_number) DO NOTHING
-    """)
+    op.execute(
+        text("""
+            INSERT INTO prompt_versions (
+                version_number, name, system_prompt, model,
+                is_active, notes, activated_at
+            )
+            VALUES (
+                :version_number, :name, :body, :model,
+                TRUE, 'Initial prompt seeded from code.', now()
+            )
+            ON CONFLICT (version_number) DO NOTHING
+        """).bindparams(
+            version_number=1,
+            name=SEED_PROMPT_V1_NAME,
+            body=SEED_PROMPT_V1_BODY,
+            model=SEED_PROMPT_V1_MODEL,
+        )
+    )
 
 
 def downgrade() -> None:
