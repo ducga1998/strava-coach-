@@ -68,3 +68,26 @@ def test_no_generics_listen_to_body_anywhere() -> None:
         "vmm_projection": "VMM 30h15m.",
     }
     assert score_no_generics(debrief) == 0
+
+
+from eval.scorer import score_acwr_band
+
+
+def test_acwr_band_correct_green() -> None:
+    debrief = {"load_verdict": "ACWR 1.0 → green band. CTL 52.", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_acwr_band(debrief, expected_band="green") == 3
+
+
+def test_acwr_band_correct_caution() -> None:
+    debrief = {"load_verdict": "ACWR 1.4 → caution. Reduce next.", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_acwr_band(debrief, expected_band="caution") == 3
+
+
+def test_acwr_band_wrong_label() -> None:
+    debrief = {"load_verdict": "ACWR 1.4 → green band.", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_acwr_band(debrief, expected_band="caution") == 0
+
+
+def test_acwr_band_injury_risk_alias() -> None:
+    debrief = {"load_verdict": "ACWR 1.6 — danger zone today.", "technical_insight": "", "next_session_action": "", "nutrition_protocol": "", "vmm_projection": ""}
+    assert score_acwr_band(debrief, expected_band="injury risk") == 3
