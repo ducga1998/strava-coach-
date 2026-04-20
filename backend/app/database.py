@@ -46,3 +46,13 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with get_session_factory()() as session:
         yield session
+
+
+def SessionLocal() -> AsyncSession:
+    """Return a fresh AsyncSession usable as ``async with SessionLocal() as db:``.
+
+    Thin wrapper over :func:`get_session_factory` so scripts and CLIs have a
+    familiar name for opening a one-off session outside the FastAPI request
+    lifecycle.
+    """
+    return get_session_factory()()
