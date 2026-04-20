@@ -8,6 +8,9 @@ import type {
   ActivityListItem,
   AthleteInfo,
   DashboardLoadResponse,
+  ExistingFeedbackResponse,
+  FeedbackCreateRequest,
+  FeedbackItem,
   OnboardingProfilePayload,
   PushDescriptionResponse,
   RaceTarget,
@@ -120,6 +123,19 @@ export async function deleteRaceTarget(params: {
   athleteId: number
 }): Promise<void> {
   await request(api.delete(`/targets/${params.id}?athlete_id=${params.athleteId}`))
+}
+
+export async function getExistingFeedback(
+  activityId: number,
+  athleteId: number,
+): Promise<ExistingFeedbackResponse> {
+  return request(api.get(`/feedback/activity/${activityId}?athlete_id=${athleteId}`))
+}
+
+export async function submitFeedback(
+  payload: FeedbackCreateRequest,
+): Promise<FeedbackItem> {
+  return request(api.post("/feedback", payload))
 }
 
 async function request<T>(promise: Promise<AxiosResponse<T>>): Promise<T> {

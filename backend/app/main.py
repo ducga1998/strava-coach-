@@ -4,9 +4,11 @@ from collections.abc import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.admin.routers import admin_auth
+from app.admin.routers import admin_auth, admin_feedback
 from app.config import settings
-from app.routers import activities, athletes, auth, dashboard, onboarding, targets, webhook
+from app.routers import (
+    activities, athletes, auth, dashboard, feedback, onboarding, targets, webhook,
+)
 from app.services.webhook_subscription import ensure_webhook_subscription
 
 
@@ -43,7 +45,9 @@ def register_routes(api: FastAPI) -> None:
     api.include_router(activities.router)
     api.include_router(athletes.router)
     api.include_router(dashboard.router)
+    api.include_router(feedback.router)
     api.include_router(admin_auth.router)
+    api.include_router(admin_feedback.router)
 
 
 def allowed_cors_origins(frontend_url: str, extra_origins: str) -> list[str]:
