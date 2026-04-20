@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { lazy, Suspense } from "react"
 import { BrowserRouter, Route, Routes } from "react-router-dom"
 import ActivityDetail from "./pages/ActivityDetail"
 import Connect from "./pages/Connect"
@@ -6,6 +7,8 @@ import Dashboard from "./pages/Dashboard"
 import Home from "./pages/Home"
 import Setup from "./pages/Setup"
 import Targets from "./pages/Targets"
+
+const AdminApp = lazy(() => import("./admin/AdminApp"))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,6 +30,14 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/activities/:id" element={<ActivityDetail />} />
           <Route path="/targets" element={<Targets />} />
+          <Route
+            path="/admin/*"
+            element={
+              <Suspense fallback={<div className="p-8">Loading admin…</div>}>
+                <AdminApp />
+              </Suspense>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

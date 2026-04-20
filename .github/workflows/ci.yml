@@ -56,7 +56,7 @@ jobs:
         run: alembic upgrade head
       - name: Run pytest
         working-directory: backend
-        run: pytest tests/ -v
+        run: python -m pytest tests/ -v
 
   frontend:
     runs-on: ubuntu-latest

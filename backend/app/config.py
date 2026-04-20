@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     cors_origins: str = ""
     enable_llm_debriefs: bool = True
     strava_push_description: bool = True
+    admin_session_lifetime_days: int = 14
 
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env"),
