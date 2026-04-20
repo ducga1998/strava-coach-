@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    TypeDecorator,
 )
 from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import JSONB
@@ -22,6 +23,35 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.activity import Activity
     from app.models.athlete import Athlete
+
+
+class _UTCDateTime(TypeDecorator):
+    """DateTime that guarantees tz-aware UTC values on both bind and result.
+
+    Postgres' ``TIMESTAMPTZ`` already returns tz-aware datetimes, but SQLite's
+    ``DATETIME`` column strips ``tzinfo``. This decorator makes
+    ``DateTime(timezone=True)`` behave the same on both dialects — critical for
+    the admin-session expiry comparisons which rely on
+    ``value > datetime.now(timezone.utc)``.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):  # noqa: ANN001
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+
+    def process_result_value(self, value, dialect):  # noqa: ANN001
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+
+
+# Shared alias used by every admin-module TIMESTAMPTZ column so the sqlite test
+# harness gets tz-aware values identical to Postgres at runtime.
+_TZ = _UTCDateTime(timezone=True)
 
 
 class Thumb(str, enum.Enum):
@@ -36,11 +66,11 @@ class Admin(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str | None] = mapped_column(String(100))
-    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disabled_at: Mapped[datetime | None] = mapped_column(_TZ)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        _TZ, server_default=func.now(), nullable=False
     )
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_login_at: Mapped[datetime | None] = mapped_column(_TZ)
 
     sessions: Mapped[list["AdminSession"]] = relationship(
         back_populates="admin", cascade="all, delete-orphan"
@@ -55,11 +85,11 @@ class AdminSession(Base):
         ForeignKey("admins.id", ondelete="CASCADE"), nullable=False
     )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(_TZ, nullable=False, index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(_TZ)
     user_agent: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        _TZ, server_default=func.now(), nullable=False
     )
 
     admin: Mapped[Admin] = relationship(back_populates="sessions")
@@ -77,10 +107,10 @@ class PromptVersion(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("admins.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        _TZ, server_default=func.now(), nullable=False
     )
-    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    activated_at: Mapped[datetime | None] = mapped_column(_TZ)
+    deactivated_at: Mapped[datetime | None] = mapped_column(_TZ)
 
     __table_args__ = (
         # PostgreSQL partial unique index: at most one active version.
@@ -116,7 +146,7 @@ class DebriefRun(Base):
     # JSONB in Postgres, JSON in sqlite (for in-memory tests in conftest).
     raw_output: Mapped[dict | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+        _TZ, server_default=func.now(), nullable=False, index=True
     )
 
 
@@ -132,7 +162,7 @@ class DebriefRating(Base):
     thumb: Mapped[Thumb] = mapped_column(Enum(Thumb, name="thumb"), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        _TZ, server_default=func.now(), nullable=False
     )
 
 
@@ -146,5 +176,5 @@ class DebriefAutoFlag(Base):
     rule_name: Mapped[str] = mapped_column(String(50), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        _TZ, server_default=func.now(), nullable=False
     )
