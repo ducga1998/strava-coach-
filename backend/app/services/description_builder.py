@@ -1,7 +1,4 @@
-# Strava's activity description field has a hard server-side cap. We stay
-# comfortably under 4096 so a trailing ellipsis + the deep-dive URL always fit.
-MAX_DESCRIPTION_CHARS = 4000
-_TRUNCATION_SUFFIX = "…"
+_DIVIDER = "─" * 17
 
 
 def acwr_zone_label(acwr: float) -> str:
@@ -15,44 +12,53 @@ def acwr_zone_label(acwr: float) -> str:
 
 
 def format_strava_description(
-    tss: float | None,
-    acwr: float | None,
-    z2_pct: float | None,
-    hr_drift_pct: float | None,
-    decoupling_pct: float | None,
+    tss: float,
+    acwr: float,
+    z2_pct: float,
+    hr_drift_pct: float,
+    decoupling_pct: float,
     next_action: str,
     deep_dive_url: str,
+    feedback_url: str,
     nutrition_protocol: str = "",
     vmm_projection: str = "",
 ) -> str:
-    # Callers sometimes have partial metrics (e.g. a run with no HR stream
-    # produces hr_drift=None). Coerce here so no new caller accidentally
-    # triggers TypeError from the numeric format specs below.
-    tss_v = float(tss or 0.0)
-    acwr_v = float(acwr or 0.0)
-    z2_v = float(z2_pct or 0.0)
-    hr_drift_v = float(hr_drift_pct or 0.0)
-    decoupling_v = float(decoupling_pct or 0.0)
+    """Build a Strava activity description split into visually distinct blocks.
 
-    zone = acwr_zone_label(acwr_v)
-    lines = [
-        f"⚡ TSS {tss_v:.0f} · ACWR {acwr_v:.2f} ({zone}) · Z2 {z2_v:.0f}%",
-        f"📉 HR drift {hr_drift_v:.1f}% · decoupling {decoupling_v:.1f}%",
-    ]
+    Layout:
+        metrics (2 lines)
+        [blank]
+        coaching  (0-2 lines, omitted entirely when both inputs empty)
+        [blank]
+        → Next:  (omitted when next_action empty)
+        [blank]
+        ──────
+        📊 Deep dive:  <url>
+        💬 Feedback:   <url>
+    """
+    zone = acwr_zone_label(acwr)
+    blocks: list[list[str]] = []
+
+    blocks.append([
+        f"⚡ TSS {tss:.0f}  ·  ACWR {acwr:.2f} {zone}",
+        f"   Z2 {z2_pct:.0f}%  ·  HR drift {hr_drift_pct:.1f}%  ·  Decoupling {decoupling_pct:.1f}%",
+    ])
+
+    coaching: list[str] = []
     if nutrition_protocol:
-        lines.append(f"🍜 {nutrition_protocol}")
+        coaching.append(f"🍜 Fuel: {nutrition_protocol}")
     if vmm_projection:
-        lines.append(f"🏔️ {vmm_projection}")
-    lines += [
-        f"→ {next_action}",
-        f"🔍 {deep_dive_url}",
-    ]
-    description = "\n".join(lines)
-    if len(description) <= MAX_DESCRIPTION_CHARS:
-        return description
-    # Preserve the trailing deep-dive URL — it's the link users click to see
-    # the full report — and truncate the body above it.
-    tail = f"\n🔍 {deep_dive_url}"
-    budget = MAX_DESCRIPTION_CHARS - len(tail) - len(_TRUNCATION_SUFFIX)
-    body_without_tail = description[: -len(tail)] if description.endswith(tail) else description
-    return body_without_tail[:budget] + _TRUNCATION_SUFFIX + tail
+        coaching.append(f"🏔️ VMM: {vmm_projection}")
+    if coaching:
+        blocks.append(coaching)
+
+    if next_action:
+        blocks.append([f"→ Next: {next_action}"])
+
+    blocks.append([
+        _DIVIDER,
+        f"📊 Deep dive:  {deep_dive_url}",
+        f"💬 Feedback:   {feedback_url}",
+    ])
+
+    return "\n\n".join("\n".join(block) for block in blocks)
