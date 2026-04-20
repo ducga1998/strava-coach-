@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-import app.models
+import app.models  # noqa: F401
+import app.admin.models  # noqa: F401
 from app.database import Base, get_db
 from app.main import app
 

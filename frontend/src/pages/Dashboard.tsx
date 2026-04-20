@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { Typography, Alert, Button } from "antd"
+import { WarningFilled } from "@ant-design/icons"
 import DarkAppShell from "../components/layout/DarkAppShell"
 import {
   getAthleteInfo,
@@ -13,7 +14,13 @@ import AcwrGauge from "../components/AcwrGauge"
 import LoadChart from "../components/LoadChart"
 import MetricBadge from "../components/MetricBadge"
 import PhaseIndicator from "../components/PhaseIndicator"
-import type { ActivityListItem, AthleteInfo, DashboardLoadResponse, LoadSnapshot } from "../types"
+import type {
+  AcwrZone,
+  ActivityListItem,
+  AthleteInfo,
+  DashboardLoadResponse,
+  LoadSnapshot,
+} from "../types"
 
 const emptyLoad: DashboardLoadResponse = {
   training_phase: "Base",
@@ -86,14 +93,15 @@ function DashboardView(props: {
   load: DashboardLoadResponse
 }) {
   const latest = props.load.latest
+  const acwrZone = resolveAcwrZone(latest)
   return (
     <main className="px-4 py-6 text-neutral-50">
       <div className="mx-auto max-w-6xl space-y-6">
         <DashboardHeader athlete={props.athlete} load={props.load} />
-        {isRiskZone(latest) ? <RiskBanner latest={latest} /> : null}
         {props.load.history.length < 14 ? <BaseliningBanner count={props.load.history.length} /> : null}
         {props.athlete ? <AthleteCard athlete={props.athlete} /> : null}
         <MetricGrid load={props.load} />
+        <AcwrBanner zone={acwrZone} latest={latest} warning={props.load.warning ?? null} />
         <section className="grid gap-6 xl:grid-cols-[1fr_320px]">
           <LoadChart data={props.load.history} variant="dark" />
           <AcwrGauge acwr={latest.acwr} variant="dark" />
@@ -243,15 +251,52 @@ function ActivityRow(props: { activity: ActivityListItem; athleteId: number }) {
   )
 }
 
-function RiskBanner({ latest }: { latest: LoadSnapshot }) {
+function AcwrBanner(props: {
+  zone: AcwrZone | "low"
+  latest: LoadSnapshot
+  warning: string | null
+}) {
+  if (props.zone === "green" || props.zone === "low") return null
+  const acwr = props.latest.acwr.toFixed(2)
+  if (props.zone === "red") {
+    const message =
+      props.warning ??
+      `Injury risk zone — ACWR ${acwr}. Consider a deload before adding more load.`
+    return (
+      <div
+        className="flex items-start gap-3 rounded-lg border-l-4 border-red-500 bg-red-50 p-4 text-red-900 shadow-[0_12px_40px_rgba(220,38,38,0.18)]"
+        role="alert"
+      >
+        <WarningFilled className="mt-0.5 shrink-0 text-lg text-red-500" aria-hidden="true" />
+        <p className="text-base font-semibold leading-relaxed">{message}</p>
+      </div>
+    )
+  }
+  // yellow
+  const message = props.warning ?? `ACWR ${acwr} — monitor load.`
   return (
-    <Alert
-      className="font-semibold"
-      message={`Injury risk zone: ACWR ${latest.acwr.toFixed(2)} and TSB ${latest.tsb.toFixed(1)}. Consider deloading before adding more load.`}
-      showIcon
-      type="error"
-    />
+    <div
+      className="flex items-start gap-3 rounded-lg border-l-4 border-yellow-400 bg-yellow-50 p-4 text-amber-900 shadow-[0_12px_40px_rgba(202,138,4,0.18)]"
+      role="alert"
+    >
+      <WarningFilled className="mt-0.5 shrink-0 text-lg text-yellow-500" aria-hidden="true" />
+      <p className="text-base font-semibold leading-relaxed">{message}</p>
+    </div>
   )
+}
+
+function resolveAcwrZone(latest: LoadSnapshot): AcwrZone | "low" {
+  // Prefer server-provided zone (per LEADER.md contract). Fall back to numeric mapping
+  // using the thresholds documented in FRONTEND.md when backend omits the field.
+  if (latest.acwr_zone) return latest.acwr_zone
+  return zoneFromAcwr(latest.acwr)
+}
+
+function zoneFromAcwr(acwr: number): AcwrZone | "low" {
+  if (acwr < 0.8) return "low"
+  if (acwr <= 1.3) return "green"
+  if (acwr <= 1.5) return "yellow"
+  return "red"
 }
 
 function BaseliningBanner({ count }: { count: number }) {
@@ -282,10 +327,6 @@ function StatusPage({ message }: { message: string }) {
 
 function EmptyActivities() {
   return <p className="py-6 text-sm text-brand-muted">No processed activities yet.</p>
-}
-
-function isRiskZone(latest: LoadSnapshot): boolean {
-  return latest.acwr > 1.5 || latest.tsb < -30
 }
 
 function statusClass(status: ActivityListItem["processing_status"]): string {

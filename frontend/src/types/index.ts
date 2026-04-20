@@ -12,11 +12,15 @@ export interface LoadPoint {
   acwr?: number
 }
 
+export type AcwrZone = "green" | "yellow" | "red"
+
 export interface LoadSnapshot {
   ctl: number
   atl: number
   tsb: number
   acwr: number
+  /** Optional — provided by backend per LEADER.md contract; may be absent in current impl. */
+  acwr_zone?: AcwrZone
 }
 
 export interface WeeklyVolume {
@@ -42,6 +46,8 @@ export interface DashboardLoadResponse {
   history: LoadPoint[]
   weekly_volume?: WeeklyVolume
   target?: RaceTarget | null
+  /** Optional server-provided warning copy (per LEADER.md). Display verbatim when present. */
+  warning?: string | null
 }
 
 export interface ActivityListItem {
