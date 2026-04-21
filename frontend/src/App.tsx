@@ -8,6 +8,7 @@ import Feedback from "./pages/Feedback"
 import Home from "./pages/Home"
 import Setup from "./pages/Setup"
 import Targets from "./pages/Targets"
+import { SkeletonBlock, SkeletonLine } from "./components/Skeleton"
 
 const AdminApp = lazy(() => import("./admin/AdminApp"))
 
@@ -35,7 +36,7 @@ export default function App() {
           <Route
             path="/admin/*"
             element={
-              <Suspense fallback={<div className="p-8">Loading admin…</div>}>
+              <Suspense fallback={<AdminRouteSkeleton />}>
                 <AdminApp />
               </Suspense>
             }
@@ -43,5 +44,17 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
+  )
+}
+
+function AdminRouteSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading admin" className="min-h-screen bg-slate-50 p-6">
+      <div className="mx-auto max-w-5xl space-y-4">
+        <SkeletonLine height="1.25rem" width="200px" />
+        <SkeletonBlock className="h-20 w-full" rounded="lg" />
+        <SkeletonBlock className="h-64 w-full" rounded="lg" />
+      </div>
+    </div>
   )
 }

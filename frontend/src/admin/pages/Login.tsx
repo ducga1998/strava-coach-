@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
 import { useAdminLogin, useAdminMe } from "../api"
+import { SkeletonBlock, SkeletonLine } from "../../components/Skeleton"
 
 export default function Login() {
   const { data: me, isLoading: meLoading } = useAdminMe()
@@ -9,7 +10,7 @@ export default function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
-  if (meLoading) return null
+  if (meLoading) return <LoginSkeleton />
   if (me) return <Navigate to="/admin" replace />
 
   async function onSubmit(e: FormEvent) {
@@ -69,6 +70,29 @@ export default function Login() {
           {login.isPending ? "Signing in…" : "Sign in"}
         </button>
       </form>
+    </div>
+  )
+}
+
+function LoginSkeleton() {
+  return (
+    <div
+      aria-busy="true"
+      aria-label="Checking session"
+      className="flex min-h-screen items-center justify-center bg-slate-50"
+    >
+      <div className="w-full max-w-sm space-y-4 rounded-xl bg-white p-8 shadow">
+        <SkeletonLine height="1.25rem" width="40%" />
+        <div className="space-y-2">
+          <SkeletonLine height="0.75rem" width="20%" />
+          <SkeletonBlock className="h-10 w-full" rounded="md" />
+        </div>
+        <div className="space-y-2">
+          <SkeletonLine height="0.75rem" width="30%" />
+          <SkeletonBlock className="h-10 w-full" rounded="md" />
+        </div>
+        <SkeletonBlock className="h-10 w-full" rounded="md" />
+      </div>
     </div>
   )
 }

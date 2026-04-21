@@ -9,6 +9,7 @@ import {
   listRaceTargets,
   requireAthleteId,
 } from "../api/client"
+import { SkeletonBlock, SkeletonLine } from "../components/Skeleton"
 import type { RacePriority, RaceTarget, RaceTargetPayload } from "../types"
 
 interface TargetForm {
@@ -135,7 +136,7 @@ function TargetList(props: {
   onDelete: (id: number) => void
   targets: RaceTarget[]
 }) {
-  if (props.isLoading) return <TargetsStatus message="Loading targets..." />
+  if (props.isLoading) return <TargetListSkeleton />
   return (
     <Card className="rounded-lg shadow-panel border-slate-200" bordered={false}>
       <Typography.Title level={3} className="!mt-0 !mb-4 font-bold text-slate-950">Upcoming races</Typography.Title>
@@ -214,4 +215,28 @@ function optionalNumber(value: string): number | undefined {
 
 function TargetsStatus({ message }: { message: string }) {
   return <main className="min-h-screen bg-trail-surface p-8 text-slate-800">{message}</main>
+}
+
+function TargetListSkeleton() {
+  return (
+    <Card
+      aria-busy="true"
+      aria-label="Loading targets"
+      bordered={false}
+      className="rounded-lg border-slate-200 shadow-panel"
+    >
+      <SkeletonLine height="1.25rem" width="180px" />
+      <div className="mt-4 divide-y divide-slate-100">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div className="flex items-center justify-between gap-3 py-4" key={i}>
+            <div className="flex-1 space-y-2">
+              <SkeletonLine height="0.875rem" width="60%" />
+              <SkeletonLine height="0.625rem" width="40%" />
+            </div>
+            <SkeletonBlock className="h-8 w-20" rounded="md" />
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
 }

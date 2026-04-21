@@ -8,6 +8,7 @@ import {
   requireAthleteId,
   saveOnboardingProfile,
 } from "../api/client"
+import { SkeletonBlock, SkeletonLine } from "../components/Skeleton"
 import type { LanguageCode, OnboardingProfilePayload, UnitSystem } from "../types"
 
 const steps = ["Threshold HR", "Threshold pace", "Body metrics", "Preferences"] as const
@@ -62,7 +63,7 @@ export default function Setup() {
 
   if (athleteId === null) return <SetupStatus message="Add athlete_id in the URL before setup." />
   if (athleteQuery.isPending) {
-    return <SetupStatus message="Loading your profile…" />
+    return <SetupSkeleton />
   }
   if (athleteQuery.isError) {
     return <SetupStatus message={athleteQuery.error.message} />
@@ -260,4 +261,38 @@ function optionalNumber(value: string): number | undefined {
 
 function SetupStatus({ message }: { message: string }) {
   return <main className="min-h-screen bg-trail-surface p-8 text-slate-800">{message}</main>
+}
+
+function SetupSkeleton() {
+  return (
+    <main
+      aria-busy="true"
+      aria-label="Loading profile"
+      className="min-h-screen bg-trail-surface px-4 py-8 text-trail-ink"
+    >
+      <div className="mx-auto max-w-xl rounded-lg border border-slate-200 bg-white p-6 shadow-panel">
+        <div className="flex items-center gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className="flex flex-1 items-center gap-2" key={i}>
+              <SkeletonBlock className="h-6 w-6" rounded="full" />
+              <SkeletonLine height="0.625rem" width="60%" />
+            </div>
+          ))}
+        </div>
+        <SkeletonLine className="mt-8" height="1.5rem" width="55%" />
+        <div className="mt-6 space-y-5">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div className="space-y-2" key={i}>
+              <SkeletonLine height="0.75rem" width="160px" />
+              <SkeletonBlock className="h-10 w-full" rounded="md" />
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 flex items-center justify-between">
+          <SkeletonBlock className="h-10 w-20" rounded="md" />
+          <SkeletonBlock className="h-10 w-24" rounded="md" />
+        </div>
+      </div>
+    </main>
+  )
 }
