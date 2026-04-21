@@ -7,7 +7,8 @@ from app.agents.schema import ActivityInput, AthleteContext
 from app.agents.debrief_graph import fallback_debrief
 from app.models.activity import Activity
 from app.models.athlete import Athlete, AthleteProfile
-from app.services.activity_ingestion import _build_athlete_context, maybe_autosync_plan
+from app.services.activity_ingestion import _build_athlete_context
+from app.services.plan_import import sync_plan
 
 
 CSV_BODY = """date,workout_type,planned_tss,planned_duration_min,planned_distance_km,planned_elevation_m,description
@@ -33,8 +34,11 @@ async def test_sync_enrich_fallback_produces_compliance(
 
     monkeypatch.setattr("app.services.plan_import.fetch_plan_sheet", fake_fetch)
 
-    # Autosync the plan (normally called before metrics processing)
-    await maybe_autosync_plan(db_session, athlete.id)
+    # In production, plan autosync runs on an isolated session via
+    # workers.tasks.enqueue_plan_sync. For this integration test we call
+    # sync_plan directly on the test session — equivalent DB effect, same
+    # end-to-end path from CSV body → parsed entries → context enrichment.
+    await sync_plan(athlete.id, db_session)
 
     # Build context as if processing an activity on 2026-04-22
     context = await _build_athlete_context(
