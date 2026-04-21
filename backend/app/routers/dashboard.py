@@ -1,15 +1,13 @@
 from datetime import date, timedelta
 
 from pydantic import BaseModel
-from fastapi import APIRouter, BackgroundTasks, Depends
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.activity import Activity
 from app.models.metrics import LoadHistory
 from app.models.target import Priority, RaceTarget
-from app.workers.tasks import enqueue_backfill
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -55,14 +53,10 @@ class DashboardLoadOut(BaseModel):
 @router.get("/load", response_model=DashboardLoadOut)
 async def get_load(
     athlete_id: int,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> DashboardLoadOut:
     history = await load_history(db, athlete_id)
     target = await nearest_a_target(db, athlete_id)
-    count = await activity_count(db, athlete_id)
-    if count < 10:
-        background_tasks.add_task(enqueue_backfill, athlete_id)
     return DashboardLoadOut(
         training_phase=compute_phase(target.race_date) if target else "Base",
         latest=latest_snapshot(history),
@@ -70,13 +64,6 @@ async def get_load(
         weekly_volume=WeeklyVolumeOut(distance_km=0.0, elevation_gain_m=0.0),
         target=target_summary(target),
     )
-
-
-async def activity_count(db: AsyncSession, athlete_id: int) -> int:
-    result = await db.execute(
-        select(func.count(Activity.id)).where(Activity.athlete_id == athlete_id)
-    )
-    return result.scalar_one() or 0
 
 
 async def load_history(db: AsyncSession, athlete_id: int) -> list[LoadHistory]:

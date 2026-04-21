@@ -1,7 +1,7 @@
 import logging
 import secrets
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy import BigInteger, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ from app.services.strava_client import (
     get_authorization_url,
 )
 from app.services.token_service import TokenServiceError, encrypt
+from app.workers.tasks import enqueue_backfill
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ async def strava_login() -> RedirectResponse:
 
 @router.get("/callback")
 async def strava_callback(
+    background_tasks: BackgroundTasks,
     code: str = Query(...),
     state: str = Query(...),
     db: AsyncSession = Depends(get_db),
@@ -74,7 +76,14 @@ async def strava_callback(
             f"{settings.frontend_url}/connect?oauth_error=server_error", status_code=302
         )
 
-    return RedirectResponse(f"{settings.frontend_url}/setup?athlete_id={athlete.id}")
+    # One-time history backfill: only fires when the athlete has never been
+    # backfilled. See docs/superpowers/specs/2026-04-21-webhook-only-ingest-design.md.
+    if athlete.backfilled_at is None:
+        background_tasks.add_task(enqueue_backfill, athlete.id)
+
+    return RedirectResponse(
+        f"{settings.frontend_url}/setup?athlete_id={athlete.id}", status_code=302
+    )
 
 
 async def upsert_athlete(
