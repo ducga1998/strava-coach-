@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.credentials import StravaCredential
     from app.models.metrics import ActivityMetrics, LoadHistory
     from app.models.target import RaceTarget
+    from app.models.training_plan import TrainingPlanEntry
 
 
 class Units(str, enum.Enum):
@@ -32,6 +33,8 @@ class Athlete(Base):
     avatar_url: Mapped[str | None] = mapped_column(String(500))
     city: Mapped[str | None] = mapped_column(String(100))
     country: Mapped[str | None] = mapped_column(String(100))
+    plan_sheet_url: Mapped[str | None] = mapped_column(Text)
+    plan_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -47,6 +50,9 @@ class Athlete(Base):
     targets: Mapped[list["RaceTarget"]] = relationship(back_populates="athlete")
     metrics: Mapped[list["ActivityMetrics"]] = relationship(back_populates="athlete")
     load_history: Mapped[list["LoadHistory"]] = relationship(back_populates="athlete")
+    plan_entries: Mapped[list["TrainingPlanEntry"]] = relationship(
+        back_populates="athlete", cascade="all, delete-orphan"
+    )
 
 
 class AthleteProfile(Base):
