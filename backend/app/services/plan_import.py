@@ -8,13 +8,16 @@ import csv
 import io
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Literal
 
 import httpx
 from pydantic import BaseModel
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.training_plan import WORKOUT_TYPES
+from app.models.athlete import Athlete
+from app.models.training_plan import WORKOUT_TYPES, TrainingPlanEntry
 
 
 REQUIRED_COLUMNS = (
@@ -185,3 +188,68 @@ async def fetch_plan_sheet(
             f"sheet fetch returned {response.status_code}: {response.text[:200]}"
         )
     return response.text
+
+
+async def sync_plan(athlete_id: int, db: AsyncSession) -> SyncReport:
+    athlete = await db.get(Athlete, athlete_id)
+    if athlete is None:
+        return SyncReport(status="failed", error="athlete not found")
+    if not athlete.plan_sheet_url:
+        return SyncReport(status="failed", error="plan sheet URL not configured")
+
+    try:
+        csv_text = await fetch_plan_sheet(athlete.plan_sheet_url)
+    except (InvalidSheetURL, SheetFetchError) as exc:
+        return SyncReport(status="failed", error=str(exc))
+
+    try:
+        parsed, errors = parse_plan_csv(csv_text)
+    except ValueError as exc:
+        return SyncReport(status="failed", error=f"CSV parse error: {exc}")
+
+    await _upsert_entries(db, athlete_id, parsed)
+    athlete.plan_synced_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return SyncReport(
+        status="ok",
+        fetched_rows=len(parsed) + len(errors),
+        accepted=len(parsed),
+        rejected=[RowError(row_number=e.row_number, reason=e.reason) for e in errors],
+    )
+
+
+async def _upsert_entries(
+    db: AsyncSession, athlete_id: int, entries: list[ParsedEntry]
+) -> None:
+    """Delete-then-insert by (athlete_id, date). Simple, portable across
+    Postgres + SQLite test engine. Dedup by date within the batch —
+    last one wins."""
+    if not entries:
+        return
+    latest_by_date: dict[date, ParsedEntry] = {}
+    for entry in entries:
+        latest_by_date[entry.date] = entry
+
+    dates = list(latest_by_date.keys())
+    await db.execute(
+        delete(TrainingPlanEntry).where(
+            TrainingPlanEntry.athlete_id == athlete_id,
+            TrainingPlanEntry.date.in_(dates),
+        )
+    )
+    await db.flush()
+    for entry in latest_by_date.values():
+        db.add(
+            TrainingPlanEntry(
+                athlete_id=athlete_id,
+                date=entry.date,
+                workout_type=entry.workout_type,
+                planned_tss=entry.planned_tss,
+                planned_duration_min=entry.planned_duration_min,
+                planned_distance_km=entry.planned_distance_km,
+                planned_elevation_m=entry.planned_elevation_m,
+                description=entry.description,
+                source="sheet_csv",
+            )
+        )
