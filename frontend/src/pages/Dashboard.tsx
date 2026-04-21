@@ -6,6 +6,7 @@ import DarkAppShell from "../components/layout/DarkAppShell"
 import {
   getAthleteInfo,
   getDashboardLoad,
+  getPlanRange,
   getStoredAthleteId,
   listActivities,
   requireAthleteId,
@@ -21,6 +22,7 @@ import type {
   AthleteInfo,
   DashboardLoadResponse,
   LoadSnapshot,
+  PlanEntry,
 } from "../types"
 
 const emptyLoad: DashboardLoadResponse = {
@@ -103,6 +105,7 @@ function DashboardView(props: {
         {props.athlete ? <AthleteCard athlete={props.athlete} /> : null}
         <MetricGrid load={props.load} />
         <AcwrBanner zone={acwrZone} latest={latest} warning={props.load.warning ?? null} />
+        <ThisWeekStrip athleteId={props.athleteId} />
         <section className="grid gap-6 xl:grid-cols-[1fr_320px]">
           <LoadChart data={props.load.history} variant="dark" />
           <AcwrGauge acwr={latest.acwr} variant="dark" />
@@ -410,4 +413,78 @@ function formatKm(meters: number): string {
 
 function formatMinutes(seconds: number): string {
   return `${Math.round(seconds / 60)} min`
+}
+
+function toIso(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+function usePlannedThisWeek(athleteId: number) {
+  const today = new Date()
+  const end = new Date()
+  end.setDate(today.getDate() + 6)
+  return useQuery({
+    queryKey: ["plan-range", athleteId, toIso(today), toIso(end)],
+    queryFn: () =>
+      getPlanRange({
+        athleteId,
+        from: toIso(today),
+        to: toIso(end),
+      }),
+  })
+}
+
+function ThisWeekStrip({ athleteId }: { athleteId: number }) {
+  const query = usePlannedThisWeek(athleteId)
+  const entries = query.data ?? []
+  if (entries.length === 0) return null
+  const byDate = new Map<string, PlanEntry>()
+  for (const entry of entries) byDate.set(entry.date, entry)
+
+  const today = new Date()
+  const days: { label: string; iso: string; isToday: boolean }[] = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date()
+    d.setDate(today.getDate() + i)
+    const iso = toIso(d)
+    days.push({
+      label: i === 0 ? "Today" : d.toLocaleDateString("en-US", { weekday: "short" }),
+      iso,
+      isToday: i === 0,
+    })
+  }
+
+  return (
+    <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        This week (planned)
+      </h2>
+      <div className="grid grid-cols-7 gap-2 text-center">
+        {days.map((day) => {
+          const entry = byDate.get(day.iso) ?? null
+          return (
+            <div
+              className={
+                "rounded border p-2 text-xs " +
+                (day.isToday
+                  ? "border-trail-strava bg-orange-50"
+                  : "border-slate-200")
+              }
+              key={day.iso}
+            >
+              <p className="font-bold text-slate-800">{day.label}</p>
+              <p className="mt-1 text-slate-700">
+                {entry ? entry.workout_type : "—"}
+              </p>
+              <p className="mt-1 font-mono text-[11px] text-slate-500">
+                {entry && entry.planned_tss !== null
+                  ? `TSS ${entry.planned_tss.toFixed(0)}`
+                  : ""}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
 }
