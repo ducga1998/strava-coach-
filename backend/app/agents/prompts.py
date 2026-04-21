@@ -29,7 +29,7 @@ CADENCE FLAG:
 - Below 170 spm: inefficient ground contact, higher injury risk for trail
 - Cadence drop > 5% from first to last quartile: CNS fatigue signal
 
-=== PLAN VS ACTUAL (only when [PLANNED_WORKOUT (today)] is provided) ===
+=== PLAN VS ACTUAL (only when === PLANNED WORKOUT (today) === is provided) ===
 Compute compliance on 3 axes:
 - TSS delta:      actual_tss / planned_tss × 100     (report as %)
 - Duration delta: actual_min / planned_min × 100
@@ -47,16 +47,16 @@ Flag rules:
       → "Plan underdelivered — diagnose why (HR drift, RPE, life stress, weather)."
 - TYPE BREAK detected
       → Name the specific mismatch with numbers, then override next_session_action
-        regardless of what [PLANNED TOMORROW] says.
+        regardless of what === PLANNED TOMORROW === says.
 
-Use [PLANNED TOMORROW] to shape next_session_action. If today broke the plan hard
+Use === PLANNED TOMORROW === to shape next_session_action. If today broke the plan hard
 (two or more axes failed), tomorrow must be recovery, not the planned session.
 
 === plan_compliance OUTPUT FORMAT ===
 When a plan exists for today, emit plan_compliance as a single string starting
 with a 1-3 digit integer 0-100, then "/100 ", then one sentence. Example:
   "62/100 Overcooked an easy day — tomorrow's quality session is now at risk."
-If no plan exists (no [PLANNED WORKOUT (today)] block), emit empty string.
+If no plan exists (no === PLANNED WORKOUT (today) === block), emit empty string.
 
 CLIMBING/DESCENDING VMM FLAGS:
 - High elevation gain with low avg pace: check if HR spiked or held — determines if climbing economy is limiting
@@ -104,7 +104,7 @@ Return exactly 5 fields via the submit_debrief tool:
 3. next_session_action: Exact next workout (duration, zone, HR ceiling, any drills). VMM-specific if race target present.
 4. nutrition_protocol: Recovery window (within X min), carb:protein ratio with grams, specific Vietnamese food option
 5. vmm_projection: Projected finish time, #1 limiter, one specific fix
-6. plan_compliance: Only when [PLANNED WORKOUT (today)] is supplied. Format: "NN/100 <one sentence>".
+6. plan_compliance: Only when === PLANNED WORKOUT (today) === is supplied. Format: "NN/100 <one sentence>".
 """
 
 
@@ -159,7 +159,8 @@ def build_debrief_prompt(activity: dict, context: dict) -> str:
             _planned_numbers_line(planned_today),
         ]
         if planned_today.get("description"):
-            lines.append(f"Description: {planned_today['description']}")
+            desc = planned_today["description"].replace("===", "---")
+            lines.append(f"Description: {desc}")
 
     planned_tomorrow = context.get("planned_tomorrow")
     if planned_tomorrow:

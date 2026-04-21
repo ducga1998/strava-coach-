@@ -81,3 +81,15 @@ def test_build_prompt_includes_tomorrow_when_present():
     assert "PLANNED TOMORROW" in prompt
     assert "recovery" in prompt
     assert "45 min" in prompt
+
+
+def test_system_prompt_markers_match_user_prompt_markers():
+    """The LLM instructions in SYSTEM_PROMPT must reference the same marker strings
+    that build_debrief_prompt actually emits. Catches drift between the two."""
+    # Markers that should appear in SYSTEM_PROMPT — matching what the user prompt emits
+    assert "=== PLANNED WORKOUT (today) ===" in SYSTEM_PROMPT
+    assert "=== PLANNED TOMORROW ===" in SYSTEM_PROMPT
+    # Negative guard: old bracketed markers must be gone
+    assert "[PLANNED_WORKOUT" not in SYSTEM_PROMPT
+    assert "[PLANNED WORKOUT" not in SYSTEM_PROMPT
+    assert "[PLANNED TOMORROW]" not in SYSTEM_PROMPT
