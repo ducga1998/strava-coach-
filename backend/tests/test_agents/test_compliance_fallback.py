@@ -86,3 +86,40 @@ def test_compliance_string_format_matches_contract():
     )
     assert result.startswith("100/100 ") or result.startswith("99/100 ") or result.startswith("98/100 ")
     assert len(result.split(" ", 1)[1]) > 0
+
+
+def test_skipped_workout_with_zero_actuals_is_penalised():
+    """Regression: previously the scoring short-circuited when actual_tss
+    or actual_duration_min were falsy (0), so a planned 180-TSS long run
+    executed as a skipped 0-TSS 0-min activity scored 100/100 "On target."
+    Now the TSS and duration deltas are computed against 0 actuals, giving
+    full -40/-30 penalties."""
+    planned = _planned("long", 180, 240)
+    score, headline = compute_plan_compliance(
+        planned=planned,
+        actual_tss=0,
+        actual_duration_min=0,
+        zone_distribution={"z3_pct": 0, "z4_pct": 0, "z5_pct": 0},
+    )
+    # TSS axis: delta = |0 - 180| / 180 = 1.0 → -40
+    # Duration axis: delta = |0 - 240| / 240 = 1.0 → -30
+    # Type fidelity: planned long, actual duration 0 < 0.75 * 240 → TYPE BREAK (-30)
+    # Total: 100 - 40 - 30 - 30 = 0
+    assert score == 0
+    assert "On target." not in headline
+
+
+def test_zero_tss_against_easy_planned_still_penalised():
+    """A 0-TSS 0-min execution against a planned easy day (no TYPE BREAK
+    triggered from either easy or quality fidelity rules) still loses
+    points on the TSS+duration axes."""
+    planned = _planned("easy", 50, 45)
+    score, headline = compute_plan_compliance(
+        planned=planned,
+        actual_tss=0,
+        actual_duration_min=0,
+        zone_distribution={"z3_pct": 0, "z4_pct": 0, "z5_pct": 0},
+    )
+    # TSS: -40. Duration: -30. No TYPE BREAK. → 30
+    assert score == 30
+    assert "underdelivered" in headline.lower()

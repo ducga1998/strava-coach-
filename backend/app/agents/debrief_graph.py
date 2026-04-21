@@ -341,18 +341,17 @@ def compute_plan_compliance(
     'Fallback scoring formula'."""
     score: float = 100.0
 
-    # TSS axis — up to -40
-    if planned.planned_tss and actual_tss and planned.planned_tss > 0:
-        delta = abs(actual_tss - planned.planned_tss) / planned.planned_tss
+    # TSS axis — up to -40. Keep the `planned_tss > 0` guard to avoid
+    # divide-by-zero, but do NOT guard on actual_tss: a planned session
+    # with an actual TSS of 0 (skipped / barely-moved workout) must be
+    # penalised, not score as "on target".
+    if planned.planned_tss and planned.planned_tss > 0:
+        delta = abs((actual_tss or 0.0) - planned.planned_tss) / planned.planned_tss
         score -= min(delta, 1.0) * 40
 
-    # Duration axis — up to -30
-    if (
-        planned.planned_duration_min
-        and actual_duration_min
-        and planned.planned_duration_min > 0
-    ):
-        delta = abs(actual_duration_min - planned.planned_duration_min) / planned.planned_duration_min
+    # Duration axis — up to -30. Same reasoning as TSS axis above.
+    if planned.planned_duration_min and planned.planned_duration_min > 0:
+        delta = abs((actual_duration_min or 0.0) - planned.planned_duration_min) / planned.planned_duration_min
         score -= min(delta, 1.0) * 30
 
     # Type fidelity axis — flat -30
@@ -421,10 +420,13 @@ def _pick_headline(
         return "Overcooked an easy day — tomorrow's quality session is now at risk."
     if type_break:
         return f"TYPE BREAK — {type_reason}."
+    # Underdelivered: planned significant TSS but actual fell short. We
+    # deliberately do NOT guard on `actual_duration_min > 10` here — a
+    # skipped (0-min) day is exactly the case that most deserves this
+    # headline, not "on target".
     if (
         planned.planned_tss
-        and actual_tss < planned.planned_tss * 0.80
-        and actual_duration_min > 10
+        and (actual_tss or 0.0) < planned.planned_tss * 0.80
     ):
         return "Plan underdelivered — diagnose why (HR drift, RPE, life stress, weather)."
     return "On target."
