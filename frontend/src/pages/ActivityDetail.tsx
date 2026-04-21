@@ -373,7 +373,12 @@ function PlannedVsActualBlock(props: {
         </thead>
         <tbody className="divide-y divide-slate-100">
           <tr>
-            <td className="py-2 font-semibold">Type</td>
+            <td className="py-2 font-semibold">
+              Type
+              <span className="ml-1 text-xs font-normal text-slate-400">
+                (plan vs sport)
+              </span>
+            </td>
             <td className="py-2">{planned.workout_type}</td>
             <td className="py-2">{props.activity.sport_type}</td>
           </tr>
