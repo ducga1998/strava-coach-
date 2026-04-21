@@ -14,6 +14,7 @@ import AcwrGauge from "../components/AcwrGauge"
 import LoadChart from "../components/LoadChart"
 import MetricBadge from "../components/MetricBadge"
 import PhaseIndicator from "../components/PhaseIndicator"
+import { SkeletonBlock, SkeletonLine } from "../components/Skeleton"
 import type {
   AcwrZone,
   ActivityListItem,
@@ -42,7 +43,7 @@ export default function Dashboard() {
   if (loadQuery.isPending)
     return (
       <DarkAppShell>
-        <StatusPage message="Loading training load..." />
+        <DashboardSkeleton />
       </DarkAppShell>
     )
   if (loadQuery.isError)
@@ -312,6 +313,66 @@ function BaseliningBanner({ count }: { count: number }) {
 
 function MissingAthleteState() {
   return <StatusPage message="Connect Strava or enter an athlete id before opening the dashboard." />
+}
+
+function DashboardSkeleton() {
+  const panel =
+    "rounded-xl border border-white/[0.14] bg-brand-charcoal/70 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]"
+  return (
+    <main className="px-4 py-6 text-neutral-50" aria-busy="true" aria-label="Loading dashboard">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <SkeletonBlock className="h-14 w-14" rounded="full" variant="dark" />
+            <div className="space-y-2">
+              <SkeletonLine height="1.25rem" variant="dark" width="180px" />
+              <SkeletonLine height="0.75rem" variant="dark" width="120px" />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <SkeletonBlock className="h-9 w-28" rounded="lg" variant="dark" />
+            <SkeletonBlock className="h-10 w-24" rounded="lg" variant="dark" />
+          </div>
+        </header>
+        <section className={`grid grid-cols-2 gap-3 md:grid-cols-4 ${panel}`}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className="space-y-2" key={i}>
+              <SkeletonLine height="0.625rem" variant="dark" width="60%" />
+              <SkeletonLine height="1.25rem" variant="dark" width="80%" />
+              <SkeletonLine height="0.625rem" variant="dark" width="40%" />
+            </div>
+          ))}
+        </section>
+        <section className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className="min-h-28 rounded-lg border border-white/10 bg-white/[0.03] p-4" key={i}>
+              <SkeletonLine height="0.625rem" variant="dark" width="40%" />
+              <SkeletonLine className="mt-3" height="1.5rem" variant="dark" width="70%" />
+              <SkeletonLine className="mt-2" height="0.625rem" variant="dark" width="55%" />
+            </div>
+          ))}
+        </section>
+        <section className="grid gap-6 xl:grid-cols-[1fr_320px]">
+          <SkeletonBlock className="h-72" rounded="xl" variant="dark" />
+          <SkeletonBlock className="h-72" rounded="xl" variant="dark" />
+        </section>
+        <section className={panel}>
+          <SkeletonLine height="1rem" variant="dark" width="160px" />
+          <div className="mt-4 divide-y divide-white/10">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div className="flex items-center justify-between py-4" key={i}>
+                <div className="space-y-2">
+                  <SkeletonLine height="0.875rem" variant="dark" width="220px" />
+                  <SkeletonLine height="0.625rem" variant="dark" width="160px" />
+                </div>
+                <SkeletonBlock className="h-6 w-16" rounded="full" variant="dark" />
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </main>
+  )
 }
 
 function StatusPage({ message }: { message: string }) {

@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useSearchParams } from "react-router-dom"
 import { getExistingFeedback, submitFeedback } from "../api/client"
+import { SkeletonBlock, SkeletonLine } from "../components/Skeleton"
 import type { FeedbackThumb } from "../types"
 
 type Status = "idle" | "submitting" | "submitted" | "error"
@@ -50,7 +51,24 @@ function FeedbackForm(props: { activityId: number; athleteId: number }) {
   }
 
   if (existingQuery.isPending) {
-    return <Shell><p className="text-sm text-slate-500">Đang tải…</p></Shell>
+    return (
+      <Shell>
+        <div aria-busy="true" aria-label="Đang tải" className="space-y-5">
+          <SkeletonBlock className="h-8 w-8" rounded="md" />
+          <div className="space-y-2">
+            <SkeletonLine height="1rem" width="80%" />
+            <SkeletonLine height="0.75rem" width="90%" />
+            <SkeletonLine height="0.75rem" width="60%" />
+          </div>
+          <div className="flex gap-3">
+            <SkeletonBlock className="h-16 flex-1" rounded="xl" />
+            <SkeletonBlock className="h-16 flex-1" rounded="xl" />
+          </div>
+          <SkeletonBlock className="h-20 w-full" rounded="lg" />
+          <SkeletonBlock className="h-11 w-full" rounded="lg" />
+        </div>
+      </Shell>
+    )
   }
 
   if (status === "submitted") {

@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom"
 import { getActivityDetail, getStoredAthleteId, pushActivityDescription } from "../api/client"
 import DebriefCard from "../components/DebriefCard"
 import MetricBadge, { type MetricTone } from "../components/MetricBadge"
+import { SkeletonBlock, SkeletonLine } from "../components/Skeleton"
 import type { ActivityDetailResponse, ActivityMetrics } from "../types"
 
 interface MetricDisplay {
@@ -19,7 +20,7 @@ export default function ActivityDetail() {
   const query = useActivityQuery(activityId)
   const [selectedMetric, setSelectedMetric] = useState("hr_tss")
   if (activityId === null) return <ActivityStatus message="Invalid activity id." />
-  if (query.isPending) return <ActivityStatus message="Loading activity debrief..." />
+  if (query.isPending) return <ActivityDetailSkeleton />
   if (query.isError) return <ActivityStatus message={query.error.message} />
   return (
     <ActivityDetailView
@@ -211,6 +212,49 @@ function NoMetrics() {
 
 function ActivityStatus({ message }: { message: string }) {
   return <main className="min-h-screen bg-trail-surface p-8 text-slate-800">{message}</main>
+}
+
+function ActivityDetailSkeleton() {
+  return (
+    <main
+      aria-busy="true"
+      aria-label="Loading activity debrief"
+      className="min-h-screen bg-trail-surface px-4 py-6 text-trail-ink"
+    >
+      <div className="mx-auto max-w-4xl space-y-6">
+        <SkeletonLine height="0.875rem" width="160px" />
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 space-y-3">
+              <SkeletonLine height="0.75rem" width="80px" />
+              <SkeletonLine height="1.75rem" width="70%" />
+              <SkeletonLine height="0.75rem" width="55%" />
+            </div>
+            <SkeletonBlock className="h-10 w-32" rounded="md" />
+          </div>
+        </section>
+        <section className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div className="min-h-28 rounded-lg border border-slate-200 bg-white p-4" key={i}>
+              <SkeletonLine height="0.625rem" width="40%" />
+              <SkeletonLine className="mt-3" height="1.5rem" width="70%" />
+              <SkeletonLine className="mt-2" height="0.625rem" width="55%" />
+            </div>
+          ))}
+        </section>
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
+          <SkeletonLine height="1rem" width="120px" />
+          <div className="mt-4 space-y-3">
+            <SkeletonLine />
+            <SkeletonLine width="92%" />
+            <SkeletonLine width="80%" />
+            <SkeletonLine width="70%" />
+            <SkeletonLine width="88%" />
+          </div>
+        </section>
+      </div>
+    </main>
+  )
 }
 
 function requireActivityId(activityId: number | null): number {
