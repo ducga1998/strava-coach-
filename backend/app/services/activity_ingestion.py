@@ -19,6 +19,7 @@ from app.models.credentials import StravaCredential
 from app.models.metrics import ActivityMetrics, LoadHistory
 from app.models.target import Priority, RaceTarget
 from app.services.description_builder import format_strava_description
+from app.services.plan_import import get_planned_for_date
 from app.services.strava_client import StravaClientProtocol, StravaStreamPayload
 from app.services.strava_client import StravaActivityPayload
 from app.services.token_service import TokenService
@@ -145,7 +146,10 @@ async def process_activity_metrics(session: AsyncSession, activity: Activity) ->
         return
     profile = await _find_profile(session, activity.athlete_id)
     metrics, values = _compute_metrics(activity, profile)
-    context = await _build_athlete_context(session, activity.athlete_id, profile)
+    activity_date = activity.start_date.date() if activity.start_date else None
+    context = await _build_athlete_context(
+        session, activity.athlete_id, profile, activity_date=activity_date
+    )
     # Drop any existing metrics row so reprocessing (e.g. admin-triggered
     # regenerate, or a webhook replay) doesn't hit the unique constraint on
     # activity_metrics.activity_id. Flush to guarantee the DELETE reaches the
@@ -255,10 +259,22 @@ async def _build_athlete_context(
     session: AsyncSession,
     athlete_id: int,
     profile: AthleteProfile | None,
+    activity_date: date | None = None,
 ) -> AthleteContext:
     load = await _latest_load(session, athlete_id)
     tss_avg = await _tss_30d_avg(session, athlete_id)
     target = await _find_nearest_target(session, athlete_id)
+
+    planned_today = None
+    planned_tomorrow = None
+    if activity_date is not None:
+        planned_today = await get_planned_for_date(
+            athlete_id, activity_date, session
+        )
+        planned_tomorrow = await get_planned_for_date(
+            athlete_id, activity_date + timedelta(days=1), session
+        )
+
     return AthleteContext(
         lthr=profile.lthr if profile and profile.lthr else 155,
         threshold_pace_sec_km=_threshold_pace(profile),
@@ -269,6 +285,8 @@ async def _build_athlete_context(
         tsb=load.tsb if load else 0.0,
         training_phase=_training_phase_for_target(target),
         race_target=_race_target_context(target) if target else None,
+        planned_today=planned_today,
+        planned_tomorrow=planned_tomorrow,
     )
 
 
