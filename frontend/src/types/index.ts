@@ -86,6 +86,7 @@ export interface Debrief {
   next_session_action: string
   nutrition_protocol?: string
   vmm_projection?: string
+  plan_compliance?: string
 }
 
 export interface ActivityDetail {
@@ -174,4 +175,45 @@ export interface FeedbackCreateRequest {
 export interface ExistingFeedbackResponse {
   existing: FeedbackItem | null
   strava_activity_id: number
+}
+
+export type WorkoutType =
+  | "recovery"
+  | "easy"
+  | "long"
+  | "tempo"
+  | "interval"
+  | "hill"
+  | "race"
+  | "rest"
+  | "cross"
+  | "strength"
+
+export interface PlanEntry {
+  date: string  // ISO YYYY-MM-DD
+  workout_type: WorkoutType
+  planned_tss: number | null
+  planned_duration_min: number | null
+  planned_distance_km: number | null
+  planned_elevation_m: number | null
+  description: string | null
+}
+
+export interface PlanConfig {
+  athlete_id: number
+  sheet_url: string | null
+  plan_synced_at: string | null
+}
+
+export interface SyncReportRow {
+  row_number: number
+  reason: string
+}
+
+export interface SyncReport {
+  status: "ok" | "failed"
+  fetched_rows: number
+  accepted: number
+  rejected: SyncReportRow[]
+  error: string | null
 }
