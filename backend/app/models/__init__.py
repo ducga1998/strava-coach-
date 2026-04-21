@@ -4,6 +4,7 @@ from app.models.credentials import StravaCredential
 from app.models.feedback import UserFeedback
 from app.models.metrics import ActivityMetrics, LoadHistory
 from app.models.target import Priority, RaceTarget
+from app.models.training_plan import TrainingPlanEntry
 
 __all__ = [
     "Activity",
@@ -14,6 +15,7 @@ __all__ = [
     "Priority",
     "RaceTarget",
     "StravaCredential",
+    "TrainingPlanEntry",
     "Units",
     "UserFeedback",
 ]

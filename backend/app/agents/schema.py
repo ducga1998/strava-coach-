@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +26,16 @@ class RaceTargetContext(BaseModel):
     training_phase: str  # Base / Build / Peak / Taper
 
 
+class PlannedWorkoutContext(BaseModel):
+    date: date
+    workout_type: str
+    planned_tss: float | None = None
+    planned_duration_min: int | None = None
+    planned_distance_km: float | None = None
+    planned_elevation_m: int | None = None
+    description: str | None = None
+
+
 class AthleteContext(BaseModel):
     lthr: int
     threshold_pace_sec_km: int
@@ -34,6 +46,8 @@ class AthleteContext(BaseModel):
     tsb: float
     training_phase: str
     race_target: RaceTargetContext | None = None
+    planned_today: PlannedWorkoutContext | None = None
+    planned_tomorrow: PlannedWorkoutContext | None = None
 
 
 class DebriefOutput(BaseModel):
@@ -42,3 +56,4 @@ class DebriefOutput(BaseModel):
     next_session_action: str = Field(max_length=500)
     nutrition_protocol: str = Field(default="", max_length=500)
     vmm_projection: str = Field(default="", max_length=500)
+    plan_compliance: str = Field(default="", max_length=300)

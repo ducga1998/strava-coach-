@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.admin.routers import admin_auth, admin_feedback
 from app.config import settings
 from app.routers import (
-    activities, athletes, auth, dashboard, feedback, onboarding, targets, webhook,
+    activities, athletes, auth, dashboard, feedback, onboarding,
+    plan, targets, webhook,
 )
 from app.services.webhook_subscription import (
     UNKNOWN_STATUS,
@@ -49,6 +50,7 @@ def register_routes(api: FastAPI) -> None:
     api.include_router(athletes.router)
     api.include_router(dashboard.router)
     api.include_router(feedback.router)
+    api.include_router(plan.router)
     api.include_router(admin_auth.router)
     api.include_router(admin_feedback.router)
 

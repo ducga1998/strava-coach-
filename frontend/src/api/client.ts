@@ -12,10 +12,13 @@ import type {
   FeedbackCreateRequest,
   FeedbackItem,
   OnboardingProfilePayload,
+  PlanConfig,
+  PlanEntry,
   PushDescriptionResponse,
   RaceTarget,
   RaceTargetPayload,
   RaceTargetUpdatePayload,
+  SyncReport,
 } from "../types"
 
 const ATHLETE_ID_STORAGE_KEY = "strava-coach-athlete-id"
@@ -136,6 +139,43 @@ export async function submitFeedback(
   payload: FeedbackCreateRequest,
 ): Promise<FeedbackItem> {
   return request(api.post("/feedback", payload))
+}
+
+export const PLAN_TEMPLATE_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/your-template-id/edit"
+// TODO(post-MVP): serve this from the backend so we can change it
+//                 without a frontend deploy. Tracked in spec open question #3.
+
+export async function putPlanConfig(params: {
+  athleteId: number
+  sheetUrl: string
+}): Promise<PlanConfig> {
+  return request(
+    api.put("/plan/config", {
+      athlete_id: params.athleteId,
+      sheet_url: params.sheetUrl,
+    }),
+  )
+}
+
+export async function deletePlanConfig(athleteId: number): Promise<void> {
+  await request(api.delete(`/plan/config?athlete_id=${athleteId}`))
+}
+
+export async function syncPlan(athleteId: number): Promise<SyncReport> {
+  return request(api.post("/plan/sync", { athlete_id: athleteId }))
+}
+
+export async function getPlanRange(params: {
+  athleteId: number
+  from: string   // YYYY-MM-DD
+  to: string
+}): Promise<PlanEntry[]> {
+  return request(
+    api.get(
+      `/plan?athlete_id=${params.athleteId}&from=${params.from}&to=${params.to}`,
+    ),
+  )
 }
 
 async function request<T>(promise: Promise<AxiosResponse<T>>): Promise<T> {

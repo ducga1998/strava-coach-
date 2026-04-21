@@ -29,6 +29,35 @@ CADENCE FLAG:
 - Below 170 spm: inefficient ground contact, higher injury risk for trail
 - Cadence drop > 5% from first to last quartile: CNS fatigue signal
 
+=== PLAN VS ACTUAL (only when === PLANNED WORKOUT (today) === is provided) ===
+Compute compliance on 3 axes:
+- TSS delta:      actual_tss / planned_tss × 100     (report as %)
+- Duration delta: actual_min / planned_min × 100
+- Type fidelity:  did execution match planned workout_type?
+
+Fidelity rules:
+- planned recovery|easy, but Z3+Z4+Z5 > 20%                    → TYPE BREAK (ran hard on recovery day)
+- planned tempo|interval|hill, but Z3+Z4+Z5 < 15%              → TYPE BREAK (skipped the quality)
+- planned long, but duration < 75% of planned_duration_min     → TYPE BREAK (cut short)
+
+Flag rules:
+- actual_tss > planned_tss × 1.20 AND planned_type in {recovery, easy}
+      → "Overcooked an easy day — tomorrow's quality session is now at risk."
+- actual_tss < planned_tss × 0.80 AND duration > 10 min
+      → "Plan underdelivered — diagnose why (HR drift, RPE, life stress, weather)."
+- TYPE BREAK detected
+      → Name the specific mismatch with numbers, then override next_session_action
+        regardless of what === PLANNED TOMORROW === says.
+
+Use === PLANNED TOMORROW === to shape next_session_action. If today broke the plan hard
+(two or more axes failed), tomorrow must be recovery, not the planned session.
+
+=== plan_compliance OUTPUT FORMAT ===
+When a plan exists for today, emit plan_compliance as a single string starting
+with a 1-3 digit integer 0-100, then "/100 ", then one sentence. Example:
+  "62/100 Overcooked an easy day — tomorrow's quality session is now at risk."
+If no plan exists (no === PLANNED WORKOUT (today) === block), emit empty string.
+
 CLIMBING/DESCENDING VMM FLAGS:
 - High elevation gain with low avg pace: check if HR spiked or held — determines if climbing economy is limiting
 - High decoupling on elevation gain run: Vert debt — quads not strong enough for sustained climbing
@@ -75,6 +104,7 @@ Return exactly 5 fields via the submit_debrief tool:
 3. next_session_action: Exact next workout (duration, zone, HR ceiling, any drills). VMM-specific if race target present.
 4. nutrition_protocol: Recovery window (within X min), carb:protein ratio with grams, specific Vietnamese food option
 5. vmm_projection: Projected finish time, #1 limiter, one specific fix
+6. plan_compliance: Only when === PLANNED WORKOUT (today) === is supplied. Format: "NN/100 <one sentence>".
 """
 
 
@@ -102,7 +132,7 @@ def build_debrief_prompt(activity: dict, context: dict) -> str:
         else "No A-race configured"
     )
 
-    return "\n".join([
+    lines = [
         "=== ATHLETE STATE ===",
         f"CTL: {context['ctl']:.1f}  ATL: {context['atl']:.1f}  TSB: {context['tsb']:.1f}",
         f"ACWR: {context['acwr']:.2f}  30-day TSS avg: {context['tss_30d_avg']:.1f}",
@@ -118,6 +148,53 @@ def build_debrief_prompt(activity: dict, context: dict) -> str:
         f"NGP: {ngp_min:.2f} min/km  (threshold: {threshold_pace_min:.1f} min/km)",
         f"Cadence: {cadence_str}",
         f"Zones: {zones_str}",
+    ]
+
+    planned_today = context.get("planned_today")
+    if planned_today:
+        lines += [
+            "",
+            "=== PLANNED WORKOUT (today) ===",
+            f"Type: {planned_today['workout_type']}",
+            _planned_numbers_line(planned_today),
+        ]
+        if planned_today.get("description"):
+            desc = planned_today["description"].replace("===", "---")
+            lines.append(f"Description: {desc}")
+
+    planned_tomorrow = context.get("planned_tomorrow")
+    if planned_tomorrow:
+        lines += [
+            "",
+            "=== PLANNED TOMORROW ===",
+            f"Type: {planned_tomorrow['workout_type']}  "
+            + _planned_summary_line(planned_tomorrow),
+        ]
+
+    lines += [
         "",
         "Diagnose this session. Be specific with numbers. Output via submit_debrief tool.",
-    ])
+    ]
+    return "\n".join(lines)
+
+
+def _planned_numbers_line(plan: dict) -> str:
+    parts = []
+    if plan.get("planned_tss") is not None:
+        parts.append(f"Planned TSS: {plan['planned_tss']:.0f}")
+    if plan.get("planned_duration_min") is not None:
+        parts.append(f"Duration: {plan['planned_duration_min']} min")
+    if plan.get("planned_distance_km") is not None:
+        parts.append(f"Distance: {plan['planned_distance_km']:.0f} km")
+    if plan.get("planned_elevation_m") is not None:
+        parts.append(f"D+: {plan['planned_elevation_m']} m")
+    return "   ".join(parts) if parts else "(no numeric targets)"
+
+
+def _planned_summary_line(plan: dict) -> str:
+    parts = []
+    if plan.get("planned_tss") is not None:
+        parts.append(f"Planned TSS: {plan['planned_tss']:.0f}")
+    if plan.get("planned_duration_min") is not None:
+        parts.append(f"Duration: {plan['planned_duration_min']} min")
+    return "  ".join(parts) if parts else "(no numeric targets)"
