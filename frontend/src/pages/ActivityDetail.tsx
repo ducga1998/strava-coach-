@@ -1,11 +1,17 @@
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { getActivityDetail, getStoredAthleteId, pushActivityDescription } from "../api/client"
+import { getActivityDetail, getPlanRange, getStoredAthleteId, pushActivityDescription } from "../api/client"
 import DebriefCard from "../components/DebriefCard"
 import MetricBadge, { type MetricTone } from "../components/MetricBadge"
 import { SkeletonBlock, SkeletonLine } from "../components/Skeleton"
-import type { ActivityDetailResponse, ActivityMetrics } from "../types"
+import type {
+  ActivityDetail as ActivityDetailData,
+  ActivityDetailResponse,
+  ActivityMetrics,
+  Debrief,
+  PlanEntry,
+} from "../types"
 
 interface MetricDisplay {
   key: string
@@ -61,6 +67,11 @@ function ActivityDetailView(props: {
         <ActivityHeader data={props.data} activityId={props.activityId} />
         <MetricPanel metrics={metrics} selected={props.selectedMetric} onSelect={props.onSelectMetric} />
         {selected ? <MetricSource metric={selected} /> : null}
+        <PlannedVsActualGate
+          activity={props.data.activity}
+          metrics={props.data.metrics}
+          debrief={props.data.debrief}
+        />
         {props.data.debrief ? <DebriefCard debrief={props.data.debrief} /> : <DebriefPending />}
       </div>
     </main>
@@ -287,4 +298,127 @@ function formatDuration(seconds: number): string {
 
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("en", { dateStyle: "medium" })
+}
+
+function PlannedVsActualGate(props: {
+  activity: ActivityDetailData
+  metrics: ActivityMetrics | null
+  debrief: Debrief | null
+}) {
+  const athleteId = getStoredAthleteId()
+  if (athleteId === null) return null
+  return (
+    <PlannedVsActualBlock
+      athleteId={athleteId}
+      activity={props.activity}
+      metrics={props.metrics}
+      debrief={props.debrief}
+    />
+  )
+}
+
+function PlannedVsActualBlock(props: {
+  athleteId: number
+  activity: ActivityDetailData
+  metrics: ActivityMetrics | null
+  debrief: Debrief | null
+}) {
+  const iso = props.activity.start_date.slice(0, 10)
+  const query = useQuery({
+    queryKey: ["plan-range", props.athleteId, iso, iso],
+    queryFn: () =>
+      getPlanRange({ athleteId: props.athleteId, from: iso, to: iso }),
+  })
+  const entries: PlanEntry[] = query.data ?? []
+  const planned = entries[0]
+  if (!planned) return null
+
+  const complianceText = props.debrief?.plan_compliance ?? ""
+  const score = parseComplianceScore(complianceText)
+  const sentence = stripComplianceScore(complianceText)
+
+  const actualTss = props.metrics?.hr_tss ?? props.metrics?.tss ?? null
+  const actualDurationMin = Math.round(props.activity.elapsed_time_sec / 60)
+
+  return (
+    <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-panel">
+      <header className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-bold text-slate-900">Planned vs actual</h2>
+        {score !== null ? (
+          <span
+            className={
+              "rounded-full px-3 py-1 text-sm font-bold " +
+              complianceBadgeClasses(score)
+            }
+          >
+            {score}/100
+          </span>
+        ) : null}
+      </header>
+      {sentence ? (
+        <p className="mb-4 text-sm italic text-slate-700">&ldquo;{sentence}&rdquo;</p>
+      ) : null}
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-slate-500">
+            <th className="pb-2"></th>
+            <th className="pb-2">Planned</th>
+            <th className="pb-2">Actual</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          <tr>
+            <td className="py-2 font-semibold">Type</td>
+            <td className="py-2">{planned.workout_type}</td>
+            <td className="py-2">{props.activity.sport_type}</td>
+          </tr>
+          <tr>
+            <td className="py-2 font-semibold">TSS</td>
+            <td className="py-2">
+              {planned.planned_tss !== null
+                ? planned.planned_tss.toFixed(0)
+                : "—"}
+            </td>
+            <td className="py-2">
+              {actualTss !== null ? actualTss.toFixed(0) : "—"}
+            </td>
+          </tr>
+          <tr>
+            <td className="py-2 font-semibold">Duration</td>
+            <td className="py-2">
+              {planned.planned_duration_min !== null
+                ? `${planned.planned_duration_min} min`
+                : "—"}
+            </td>
+            <td className="py-2">{actualDurationMin} min</td>
+          </tr>
+          {planned.description ? (
+            <tr>
+              <td className="py-2 font-semibold">Notes</td>
+              <td className="py-2" colSpan={2}>
+                {planned.description}
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+function parseComplianceScore(text: string): number | null {
+  const match = /^(\d{1,3})\/100\s/.exec(text)
+  if (!match) return null
+  const n = Number(match[1])
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null
+}
+
+function stripComplianceScore(text: string): string {
+  return text.replace(/^\d{1,3}\/100\s/, "").trim()
+}
+
+function complianceBadgeClasses(score: number): string {
+  if (score >= 90) return "bg-green-100 text-green-800"
+  if (score >= 70) return "bg-yellow-100 text-yellow-800"
+  return "bg-red-100 text-red-800"
 }
