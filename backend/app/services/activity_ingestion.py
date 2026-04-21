@@ -2,7 +2,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import BigInteger, func, select, type_coerce
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,6 +84,18 @@ async def backfill_recent_activities(
             count += 1
         except Exception:
             logger.warning("backfill skipped activity %s", strava_id, exc_info=True)
+
+    # We reached the end of the list-summaries loop. Mark the athlete as
+    # backfilled so the OAuth callback's null-guard skips subsequent calls.
+    # Per-activity failures inside the inner try/except are tolerable and
+    # already logged; a fully broken backfill would have raised from
+    # get_athlete_activities or _get_valid_token above and we'd never get
+    # here.
+    athlete = await session.get(Athlete, athlete_id)
+    if athlete is not None:
+        athlete.backfilled_at = datetime.now(timezone.utc)
+        await session.commit()
+
     return count
 
 
