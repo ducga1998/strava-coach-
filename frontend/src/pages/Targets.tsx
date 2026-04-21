@@ -5,12 +5,21 @@ import { Card, Typography, Button, Input, Select } from "antd"
 import {
   createRaceTarget,
   deleteRaceTarget,
+  deletePlanConfig,
   getStoredAthleteId,
   listRaceTargets,
+  PLAN_TEMPLATE_SHEET_URL,
+  putPlanConfig,
   requireAthleteId,
+  syncPlan,
 } from "../api/client"
 import { SkeletonBlock, SkeletonLine } from "../components/Skeleton"
-import type { RacePriority, RaceTarget, RaceTargetPayload } from "../types"
+import type {
+  RacePriority,
+  RaceTarget,
+  RaceTargetPayload,
+  SyncReport,
+} from "../types"
 
 interface TargetForm {
   raceName: string
@@ -53,6 +62,9 @@ function TargetsView({ athleteId }: { athleteId: number }) {
       <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[380px_1fr]">
         <TargetFormCard form={form} onChange={setForm} onSubmit={submit} />
         <TargetList isLoading={targets.isPending} onDelete={remove.mutate} targets={targets.data ?? []} />
+      </div>
+      <div className="mx-auto mt-6 max-w-6xl">
+        <TrainingPlanCard athleteId={athleteId} />
       </div>
     </main>
   )
@@ -239,4 +251,141 @@ function TargetListSkeleton() {
       </div>
     </Card>
   )
+}
+
+function TrainingPlanCard({ athleteId }: { athleteId: number }) {
+  const [sheetUrl, setSheetUrl] = useState("")
+  const [localError, setLocalError] = useState<string | null>(null)
+  const [lastReport, setLastReport] = useState<SyncReport | null>(null)
+
+  const saveConfig = useMutation({
+    mutationFn: (url: string) => putPlanConfig({ athleteId, sheetUrl: url }),
+    onSuccess: () => setLocalError(null),
+    onError: (err: unknown) =>
+      setLocalError(err instanceof Error ? err.message : "save failed"),
+  })
+
+  const sync = useMutation({
+    mutationFn: () => syncPlan(athleteId),
+    onSuccess: (report) => setLastReport(report),
+  })
+
+  const unlink = useMutation({
+    mutationFn: () => deletePlanConfig(athleteId),
+    onSuccess: () => {
+      setSheetUrl("")
+      setLastReport(null)
+    },
+  })
+
+  function onSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!isLikelyValidSheetUrl(sheetUrl)) {
+      setLocalError(
+        "URL must be a Google Sheets 'Publish to web → CSV' link.",
+      )
+      return
+    }
+    saveConfig.mutate(sheetUrl)
+  }
+
+  return (
+    <Card
+      className="rounded-lg shadow-panel border-slate-200"
+      bordered={false}
+    >
+      <Typography.Title level={3} className="!mt-0 !mb-4 font-bold text-slate-950">
+        Training plan
+      </Typography.Title>
+      <p className="mb-4 text-sm text-slate-600">
+        Paste your Google Sheet's <em>Publish to the web → CSV</em> URL.
+        The coach's weekly plan shows up on your dashboard and gets compared
+        against every run you log.
+      </p>
+      <form className="space-y-3" onSubmit={onSave}>
+        <TextField
+          label="Google Sheets CSV URL"
+          value={sheetUrl}
+          onChange={setSheetUrl}
+          placeholder="https://docs.google.com/spreadsheets/.../pub?output=csv"
+        />
+        <div className="flex gap-3">
+          <Button
+            type="primary"
+            htmlType="submit"
+            size="large"
+            loading={saveConfig.isPending}
+            className="bg-trail-strava font-bold"
+          >
+            Save
+          </Button>
+          <Button
+            size="large"
+            onClick={() => sync.mutate()}
+            loading={sync.isPending}
+          >
+            Sync now
+          </Button>
+          <Button
+            danger
+            size="large"
+            onClick={() => unlink.mutate()}
+            loading={unlink.isPending}
+          >
+            Unlink
+          </Button>
+        </div>
+      </form>
+      {localError ? (
+        <p className="mt-3 text-sm font-medium text-red-600">{localError}</p>
+      ) : null}
+      {sync.isError ? (
+        <p className="mt-3 text-sm font-medium text-red-600">
+          Sync failed: {(sync.error as Error).message}
+        </p>
+      ) : null}
+      {lastReport ? <SyncReportView report={lastReport} /> : null}
+      <p className="mt-6 text-sm">
+        <a
+          href={PLAN_TEMPLATE_SHEET_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="font-semibold text-blue-700 hover:underline"
+        >
+          Copy the template sheet →
+        </a>
+      </p>
+    </Card>
+  )
+}
+
+function SyncReportView({ report }: { report: SyncReport }) {
+  if (report.status === "failed") {
+    return (
+      <p className="mt-3 text-sm font-medium text-red-600">
+        Sync failed: {report.error ?? "unknown error"}
+      </p>
+    )
+  }
+  return (
+    <div className="mt-3 text-sm">
+      <p className="font-semibold text-slate-800">
+        Synced — {report.accepted} accepted, {report.rejected.length} rejected
+        out of {report.fetched_rows} rows.
+      </p>
+      {report.rejected.length > 0 ? (
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-red-700">
+          {report.rejected.map((row) => (
+            <li key={row.row_number}>
+              row {row.row_number}: {row.reason}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+function isLikelyValidSheetUrl(url: string): boolean {
+  return /^https:\/\/docs\.google\.com\/spreadsheets\/.+\/pub\?.*output=csv/i.test(url)
 }
