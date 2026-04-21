@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+import httpx
 from pydantic import BaseModel
 
 from app.models.training_plan import WORKOUT_TYPES
@@ -141,3 +143,45 @@ def _parse_optional_int(raw: str, field_name: str) -> int | None:
         return int(float(raw))  # tolerate "180.0"
     except ValueError:
         raise _RowReject(f"{field_name} '{raw}' is not numeric")
+
+
+SHEET_URL_REGEX = re.compile(
+    r"^https://docs\.google\.com/spreadsheets/.+/pub\?.*output=csv.*$"
+)
+FETCH_TIMEOUT_SEC = 10.0
+
+
+class InvalidSheetURL(ValueError):
+    """Raised when the provided sheet URL is not a Google Sheets published CSV link."""
+
+
+class SheetFetchError(RuntimeError):
+    """Raised when the fetch attempt fails (non-200, timeout, network error)."""
+
+
+def is_valid_sheet_url(url: str) -> bool:
+    return bool(SHEET_URL_REGEX.match(url))
+
+
+async def fetch_plan_sheet(
+    url: str, *, transport: httpx.AsyncBaseTransport | None = None
+) -> str:
+    if not is_valid_sheet_url(url):
+        raise InvalidSheetURL(
+            "URL must be a Google Sheets published CSV link "
+            "(https://docs.google.com/spreadsheets/.../pub?output=csv)"
+        )
+    try:
+        async with httpx.AsyncClient(
+            timeout=FETCH_TIMEOUT_SEC, transport=transport, follow_redirects=True
+        ) as client:
+            response = await client.get(url)
+    except httpx.TimeoutException as exc:
+        raise SheetFetchError(f"sheet fetch timeout: {exc}") from exc
+    except httpx.HTTPError as exc:
+        raise SheetFetchError(f"sheet fetch failed: {exc}") from exc
+    if response.status_code != 200:
+        raise SheetFetchError(
+            f"sheet fetch returned {response.status_code}: {response.text[:200]}"
+        )
+    return response.text
