@@ -90,7 +90,7 @@ async def post_plan_sync(
 @router.get("", response_model=list[PlanEntryOut])
 async def get_plan_range(
     athlete_id: int,
-    from_: date = Query(..., alias="from_"),
+    from_: date = Query(..., alias="from"),
     to: date = Query(...),
     db: AsyncSession = Depends(get_db),
 ) -> list[PlanEntryOut]:

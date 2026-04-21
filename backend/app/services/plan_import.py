@@ -106,7 +106,7 @@ def _parse_row(row: list[str]) -> ParsedEntry:
     try:
         parsed_date = date.fromisoformat(date_s)
     except ValueError:
-        raise _RowReject(f"date '{date_s}' is not ISO YYYY-MM-DD")
+        raise _RowReject(f"date '{date_s}' is not ISO YYYY-MM-DD") from None
 
     workout_type = type_s.lower()
     if workout_type not in WORKOUT_TYPES:
@@ -139,7 +139,7 @@ def _parse_optional_float(raw: str, field_name: str) -> float | None:
     try:
         return float(raw)
     except ValueError:
-        raise _RowReject(f"{field_name} '{raw}' is not numeric")
+        raise _RowReject(f"{field_name} '{raw}' is not numeric") from None
 
 
 def _parse_optional_int(raw: str, field_name: str) -> int | None:
@@ -148,11 +148,12 @@ def _parse_optional_int(raw: str, field_name: str) -> int | None:
     try:
         return int(float(raw))  # tolerate "180.0"
     except ValueError:
-        raise _RowReject(f"{field_name} '{raw}' is not numeric")
+        raise _RowReject(f"{field_name} '{raw}' is not numeric") from None
 
 
 SHEET_URL_REGEX = re.compile(
-    r"^https://docs\.google\.com/spreadsheets/.+/pub\?.*output=csv.*$"
+    r"^https://docs\.google\.com/spreadsheets/.+/pub\?.*output=csv.*$",
+    re.IGNORECASE,
 )
 FETCH_TIMEOUT_SEC = 10.0
 

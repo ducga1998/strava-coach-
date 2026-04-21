@@ -173,7 +173,7 @@ export async function getPlanRange(params: {
 }): Promise<PlanEntry[]> {
   return request(
     api.get(
-      `/plan?athlete_id=${params.athleteId}&from_=${params.from}&to=${params.to}`,
+      `/plan?athlete_id=${params.athleteId}&from=${params.from}&to=${params.to}`,
     ),
   )
 }

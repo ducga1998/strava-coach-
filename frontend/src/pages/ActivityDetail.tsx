@@ -323,7 +323,12 @@ function PlannedVsActualBlock(props: {
   metrics: ActivityMetrics | null
   debrief: Debrief | null
 }) {
-  const iso = props.activity.start_date.slice(0, 10)
+  // Use the athlete's LOCAL calendar date for the plan lookup. Slicing
+  // the ISO string gives the UTC date, which is wrong for runs that
+  // straddle midnight in the athlete's timezone (e.g. a 06:00 run in
+  // Hanoi has a UTC start_date on the previous calendar day).
+  // `toLocaleDateString("en-CA")` yields YYYY-MM-DD in local time.
+  const iso = new Date(props.activity.start_date).toLocaleDateString("en-CA")
   const query = useQuery({
     queryKey: ["plan-range", props.athleteId, iso, iso],
     queryFn: () =>

@@ -40,10 +40,9 @@ def upgrade() -> None:
             UNIQUE (athlete_id, date)
         )
     """)
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_training_plan_athlete_date "
-        "ON training_plan_entries (athlete_id, date)"
-    )
+    # Note: no separate btree index on (athlete_id, date) — the UNIQUE
+    # constraint above already produces one, and Postgres uses it for
+    # equality/range lookups on athlete_id or (athlete_id, date).
     op.execute(
         "ALTER TABLE athletes ADD COLUMN IF NOT EXISTS plan_sheet_url TEXT"
     )
@@ -55,5 +54,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("ALTER TABLE athletes DROP COLUMN IF EXISTS plan_synced_at")
     op.execute("ALTER TABLE athletes DROP COLUMN IF EXISTS plan_sheet_url")
-    op.execute("DROP INDEX IF EXISTS ix_training_plan_athlete_date")
     op.execute("DROP TABLE IF EXISTS training_plan_entries")

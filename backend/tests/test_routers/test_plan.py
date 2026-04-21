@@ -95,7 +95,7 @@ def test_get_plan_range_returns_entries(
     asyncio.run(db_session.commit())
 
     response = client.get(
-        f"/plan?athlete_id={athlete.id}&from_=2026-04-22&to=2026-04-30"
+        f"/plan?athlete_id={athlete.id}&from=2026-04-22&to=2026-04-30"
     )
     assert response.status_code == 200, response.text
     entries = response.json()

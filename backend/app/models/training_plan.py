@@ -1,7 +1,16 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -19,6 +28,11 @@ WORKOUT_TYPES = frozenset({
 
 class TrainingPlanEntry(Base):
     __tablename__ = "training_plan_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "athlete_id", "date", name="uq_training_plan_athlete_date"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     athlete_id: Mapped[int] = mapped_column(

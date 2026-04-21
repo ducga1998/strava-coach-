@@ -416,7 +416,14 @@ function formatMinutes(seconds: number): string {
 }
 
 function toIso(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  // Use local-date components (not toISOString, which converts to UTC).
+  // Matters in UTC+7 (Hanoi): a date at 00:30 local = 17:30 UTC previous
+  // day, so toISOString().slice(0, 10) would return yesterday's date and
+  // the /plan lookup would miss today's row.
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }
 
 function usePlannedThisWeek(athleteId: number) {
