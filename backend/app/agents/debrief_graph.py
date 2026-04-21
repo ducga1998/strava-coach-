@@ -3,7 +3,13 @@ import logging
 import anthropic
 
 from app.agents.prompts import SYSTEM_PROMPT, build_debrief_prompt
-from app.agents.schema import ActivityInput, AthleteContext, DebriefOutput, RaceTargetContext
+from app.agents.schema import (
+    ActivityInput,
+    AthleteContext,
+    DebriefOutput,
+    PlannedWorkoutContext,
+    RaceTargetContext,
+)
 from app.config import settings
 from app.services.description_builder import acwr_zone_label
 
@@ -36,6 +42,14 @@ _DEBRIEF_TOOL: anthropic.types.ToolParam = {
             "vmm_projection": {
                 "type": "string",
                 "description": "Projected VMM 160km finish time, #1 current limiter, one fix to next bracket",
+            },
+            "plan_compliance": {
+                "type": "string",
+                "description": (
+                    "Only when the prompt contains === PLANNED WORKOUT (today) ===. "
+                    "Start with '<0-100>/100 ' then one sentence. "
+                    "Emit empty string if no plan block present."
+                ),
             },
         },
         "required": [
@@ -82,6 +96,17 @@ async def _llm_debrief(
             if any(phrase in combined for phrase in GENERIC_PHRASES):
                 logger.warning("LLM output contained generic phrase — falling back")
                 return fallback_debrief(activity, context).model_dump()
+            # Back-fill plan_compliance deterministically when the LLM
+            # omitted it despite a plan being present. This keeps the
+            # frontend badge parser reliable.
+            if context.planned_today is not None and not result.get("plan_compliance"):
+                result["plan_compliance"] = format_plan_compliance_string(
+                    planned=context.planned_today,
+                    actual_tss=activity.hr_tss or activity.tss,
+                    actual_duration_min=activity.duration_sec / 60,
+                    zone_distribution=activity.zone_distribution,
+                )
+            result.setdefault("plan_compliance", "")
             return result
 
     return fallback_debrief(activity, context).model_dump()
@@ -92,12 +117,22 @@ async def _llm_debrief(
 # ---------------------------------------------------------------------------
 
 def fallback_debrief(activity: ActivityInput, context: AthleteContext) -> DebriefOutput:
+    plan_compliance = ""
+    if context.planned_today is not None:
+        plan_compliance = format_plan_compliance_string(
+            planned=context.planned_today,
+            actual_tss=activity.hr_tss or activity.tss,
+            actual_duration_min=activity.duration_sec / 60,
+            zone_distribution=activity.zone_distribution,
+        )
+
     return DebriefOutput(
         load_verdict=_load_verdict(activity, context),
         technical_insight=_technical_insight(activity),
         next_session_action=_next_session_action(context),
         nutrition_protocol=_nutrition_protocol(activity),
         vmm_projection=_vmm_projection(context),
+        plan_compliance=plan_compliance,
     )
 
 
@@ -285,3 +320,127 @@ def percent_of_average(value: float, average: float) -> float:
     if average <= 0:
         return 0.0
     return value / average * 100.0
+
+
+# ---------------------------------------------------------------------------
+# Plan-vs-actual fallback scoring
+# ---------------------------------------------------------------------------
+
+QUALITY_TYPES = frozenset({"tempo", "interval", "hill"})
+EASY_TYPES = frozenset({"recovery", "easy"})
+
+
+def compute_plan_compliance(
+    *,
+    planned: PlannedWorkoutContext,
+    actual_tss: float,
+    actual_duration_min: float,
+    zone_distribution: dict[str, float],
+) -> tuple[int, str]:
+    """Return (score 0-100, headline sentence). Spec: see design doc §
+    'Fallback scoring formula'."""
+    score: float = 100.0
+
+    # TSS axis — up to -40
+    if planned.planned_tss and actual_tss and planned.planned_tss > 0:
+        delta = abs(actual_tss - planned.planned_tss) / planned.planned_tss
+        score -= min(delta, 1.0) * 40
+
+    # Duration axis — up to -30
+    if (
+        planned.planned_duration_min
+        and actual_duration_min
+        and planned.planned_duration_min > 0
+    ):
+        delta = abs(actual_duration_min - planned.planned_duration_min) / planned.planned_duration_min
+        score -= min(delta, 1.0) * 30
+
+    # Type fidelity axis — flat -30
+    type_break, type_reason = _detect_type_break(
+        planned=planned,
+        actual_duration_min=actual_duration_min,
+        zone_distribution=zone_distribution,
+    )
+    if type_break:
+        score -= 30
+
+    score_int = max(0, round(score))
+
+    # Headline priority: TYPE BREAK > overcooked > underdelivered > on target
+    headline = _pick_headline(
+        planned=planned,
+        actual_tss=actual_tss,
+        actual_duration_min=actual_duration_min,
+        type_break=type_break,
+        type_reason=type_reason,
+    )
+    return score_int, headline
+
+
+def _detect_type_break(
+    *,
+    planned: PlannedWorkoutContext,
+    actual_duration_min: float,
+    zone_distribution: dict[str, float],
+) -> tuple[bool, str]:
+    z_hard = (
+        zone_distribution.get("z3_pct", 0.0)
+        + zone_distribution.get("z4_pct", 0.0)
+        + zone_distribution.get("z5_pct", 0.0)
+    )
+    if planned.workout_type in EASY_TYPES and z_hard > 20:
+        return True, "ran hard on an easy day"
+    if planned.workout_type in QUALITY_TYPES and z_hard < 15:
+        return True, "skipped the planned quality"
+    if (
+        planned.workout_type == "long"
+        and planned.planned_duration_min
+        and actual_duration_min < planned.planned_duration_min * 0.75
+    ):
+        return True, "cut the long run short"
+    return False, ""
+
+
+def _pick_headline(
+    *,
+    planned: PlannedWorkoutContext,
+    actual_tss: float,
+    actual_duration_min: float,
+    type_break: bool,
+    type_reason: str,
+) -> str:
+    overcooked_easy = (
+        planned.planned_tss is not None
+        and planned.planned_tss > 0
+        and actual_tss > planned.planned_tss * 1.20
+        and planned.workout_type in EASY_TYPES
+    )
+    # "Overcooked an easy day" subsumes the "ran hard on easy day" type break —
+    # prefer the more informative headline when both apply.
+    if overcooked_easy:
+        return "Overcooked an easy day — tomorrow's quality session is now at risk."
+    if type_break:
+        return f"TYPE BREAK — {type_reason}."
+    if (
+        planned.planned_tss
+        and actual_tss < planned.planned_tss * 0.80
+        and actual_duration_min > 10
+    ):
+        return "Plan underdelivered — diagnose why (HR drift, RPE, life stress, weather)."
+    return "On target."
+
+
+def format_plan_compliance_string(
+    *,
+    planned: PlannedWorkoutContext,
+    actual_tss: float,
+    actual_duration_min: float,
+    zone_distribution: dict[str, float],
+) -> str:
+    score, headline = compute_plan_compliance(
+        planned=planned,
+        actual_tss=actual_tss,
+        actual_duration_min=actual_duration_min,
+        zone_distribution=zone_distribution,
+    )
+    return f"{score}/100 {headline}"
