@@ -271,6 +271,9 @@ async def maybe_autosync_plan(session: AsyncSession, athlete_id: int) -> None:
         logger.warning(
             "plan autosync failed for athlete %s", athlete_id, exc_info=True
         )
+        # Rollback so a failed commit inside sync_plan doesn't poison the
+        # session for the rest of activity processing (PendingRollbackError).
+        await session.rollback()
 
 
 async def _build_athlete_context(

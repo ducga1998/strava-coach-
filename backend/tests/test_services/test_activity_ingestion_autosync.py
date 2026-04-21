@@ -65,3 +65,31 @@ async def test_autosync_swallows_exceptions(
     monkeypatch.setattr("app.services.activity_ingestion.sync_plan", fake_sync)
     # Must not raise
     await maybe_autosync_plan(db_session, athlete.id)
+
+
+@pytest.mark.asyncio
+async def test_autosync_failure_leaves_session_usable(
+    db_session: AsyncSession, monkeypatch
+):
+    """After sync_plan raises, the session must still be usable — a naïve
+    implementation leaves the session in PendingRollbackError state."""
+    athlete = Athlete(
+        strava_athlete_id=1,
+        plan_sheet_url="https://docs.google.com/spreadsheets/d/x/pub?output=csv",
+    )
+    db_session.add(athlete)
+    await db_session.commit()
+
+    async def fake_sync(_athlete_id, _db):
+        raise RuntimeError("commit failed mid-transaction")
+
+    monkeypatch.setattr("app.services.activity_ingestion.sync_plan", fake_sync)
+    await maybe_autosync_plan(db_session, athlete.id)
+
+    # Post-autosync: write something new and commit — this is what
+    # _build_athlete_context + process_activity_metrics effectively do.
+    # Without the rollback fix, this raises PendingRollbackError.
+    from app.models.athlete import Athlete as AthleteModel
+    new_athlete = AthleteModel(strava_athlete_id=999)
+    db_session.add(new_athlete)
+    await db_session.commit()  # must not raise
