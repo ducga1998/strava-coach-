@@ -9,15 +9,18 @@ import io
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import httpx
 from pydantic import BaseModel
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.athlete import Athlete
 from app.models.training_plan import WORKOUT_TYPES, TrainingPlanEntry
+
+if TYPE_CHECKING:
+    from app.agents.schema import PlannedWorkoutContext
 
 
 REQUIRED_COLUMNS = (
@@ -253,3 +256,30 @@ async def _upsert_entries(
                 source="sheet_csv",
             )
         )
+
+
+async def get_planned_for_date(
+    athlete_id: int, day: date, db: AsyncSession
+) -> "PlannedWorkoutContext | None":
+    # Lazy import: PlannedWorkoutContext is added to schema.py in Task 7.
+    # Keeping it lazy means plan_import.py is safe to import before Task 7 lands.
+    from app.agents.schema import PlannedWorkoutContext
+
+    result = await db.execute(
+        select(TrainingPlanEntry).where(
+            TrainingPlanEntry.athlete_id == athlete_id,
+            TrainingPlanEntry.date == day,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        return None
+    return PlannedWorkoutContext(
+        date=entry.date,
+        workout_type=entry.workout_type,
+        planned_tss=entry.planned_tss,
+        planned_duration_min=entry.planned_duration_min,
+        planned_distance_km=entry.planned_distance_km,
+        planned_elevation_m=entry.planned_elevation_m,
+        description=entry.description,
+    )
