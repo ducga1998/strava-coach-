@@ -19,7 +19,7 @@ from app.models.credentials import StravaCredential
 from app.models.metrics import ActivityMetrics, LoadHistory
 from app.models.target import Priority, RaceTarget
 from app.services.description_builder import format_strava_description
-from app.services.plan_import import get_planned_for_date
+from app.services.plan_import import get_planned_for_date, sync_plan
 from app.services.strava_client import StravaClientProtocol, StravaStreamPayload
 from app.services.strava_client import StravaActivityPayload
 from app.services.token_service import TokenService
@@ -146,6 +146,7 @@ async def process_activity_metrics(session: AsyncSession, activity: Activity) ->
         return
     profile = await _find_profile(session, activity.athlete_id)
     metrics, values = _compute_metrics(activity, profile)
+    await maybe_autosync_plan(session, activity.athlete_id)
     activity_date = activity.start_date.date() if activity.start_date else None
     context = await _build_athlete_context(
         session, activity.athlete_id, profile, activity_date=activity_date
@@ -253,6 +254,23 @@ async def _generate_debrief(
 ) -> dict[str, str]:
     activity_input = _activity_input(activity, values)
     return await generate_debrief(activity_input, context)
+
+
+async def maybe_autosync_plan(session: AsyncSession, athlete_id: int) -> None:
+    """Trigger a plan sync if the athlete has a sheet configured.
+
+    Failures are logged and swallowed — plan sync must never block
+    activity processing.
+    """
+    athlete = await session.get(Athlete, athlete_id)
+    if athlete is None or not athlete.plan_sheet_url:
+        return
+    try:
+        await sync_plan(athlete_id, session)
+    except Exception:
+        logger.warning(
+            "plan autosync failed for athlete %s", athlete_id, exc_info=True
+        )
 
 
 async def _build_athlete_context(
