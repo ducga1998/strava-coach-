@@ -199,14 +199,15 @@ async def fetch_plan_sheet(
 ) -> str:
     if not is_valid_sheet_url(url):
         raise InvalidSheetURL(
-            "URL must be a Google Sheets published CSV link "
-            "(https://docs.google.com/spreadsheets/.../pub?output=csv)"
+            "URL must be a Google Sheets link: /pub?output=csv, "
+            "/edit, or /export?format=csv"
         )
+    fetch_url = _normalize_sheet_url(url)
     try:
         async with httpx.AsyncClient(
             timeout=FETCH_TIMEOUT_SEC, transport=transport, follow_redirects=True
         ) as client:
-            response = await client.get(url)
+            response = await client.get(fetch_url)
     except httpx.TimeoutException as exc:
         raise SheetFetchError(f"sheet fetch timeout: {exc}") from exc
     except httpx.HTTPError as exc:

@@ -174,3 +174,33 @@ def test_normalize_edit_url_with_both_usp_and_gid():
         _normalize_sheet_url(url)
         == "https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=42"
     )
+
+
+@pytest.mark.asyncio
+async def test_fetch_converts_edit_url_to_export_before_request():
+    captured: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        return httpx.Response(200, text="date\n2026-04-22\n")
+
+    transport = httpx.MockTransport(handler)
+    url = "https://docs.google.com/spreadsheets/d/abc/edit?gid=7"
+    await fetch_plan_sheet(url, transport=transport)
+    assert captured["url"] == (
+        "https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=7"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_leaves_pub_url_untouched():
+    captured: dict[str, str] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        return httpx.Response(200, text="date\n2026-04-22\n")
+
+    transport = httpx.MockTransport(handler)
+    url = "https://docs.google.com/spreadsheets/d/abc/pub?output=csv"
+    await fetch_plan_sheet(url, transport=transport)
+    assert captured["url"] == url

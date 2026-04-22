@@ -49,8 +49,8 @@ async def put_plan_config(
     if not is_valid_sheet_url(data.sheet_url):
         raise HTTPException(
             status_code=400,
-            detail="URL must be a Google Sheets published CSV link "
-            "(https://docs.google.com/spreadsheets/.../pub?output=csv)",
+            detail="URL must be a Google Sheets link: /pub?output=csv, "
+            "/edit, or /export?format=csv",
         )
     athlete = await db.get(Athlete, data.athlete_id)
     if athlete is None:
