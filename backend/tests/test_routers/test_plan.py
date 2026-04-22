@@ -128,3 +128,80 @@ def test_post_sync_delegates_to_service(
         "rejected": [],
         "error": None,
     }
+
+
+SMALL_CSV = (
+    "date,workout_type,planned_tss,planned_duration_min,"
+    "planned_distance_km,planned_elevation_m,description\n"
+    "2026-04-22,long,180,240,35,1200,long run\n"
+)
+
+
+def test_post_import_csv_inserts_rows(
+    client: TestClient, db_session: AsyncSession
+):
+    import asyncio
+
+    athlete = asyncio.run(_make_athlete(db_session, strava_id=201))
+    response = client.post(
+        "/plan/import-csv",
+        json={"athlete_id": athlete.id, "csv_text": SMALL_CSV},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["accepted"] == 1
+    assert body["rejected"] == []
+
+
+def test_post_import_csv_rejects_empty_body(
+    client: TestClient, db_session: AsyncSession
+):
+    import asyncio
+
+    athlete = asyncio.run(_make_athlete(db_session, strava_id=202))
+    response = client.post(
+        "/plan/import-csv",
+        json={"athlete_id": athlete.id, "csv_text": ""},
+    )
+    assert response.status_code == 422
+
+
+def test_post_import_csv_rejects_oversize_body(
+    client: TestClient, db_session: AsyncSession
+):
+    import asyncio
+
+    athlete = asyncio.run(_make_athlete(db_session, strava_id=203))
+    oversize = "x" * 200_001
+    response = client.post(
+        "/plan/import-csv",
+        json={"athlete_id": athlete.id, "csv_text": oversize},
+    )
+    assert response.status_code == 422
+
+
+def test_post_import_csv_unknown_athlete(client: TestClient):
+    response = client.post(
+        "/plan/import-csv",
+        json={"athlete_id": 999_999, "csv_text": SMALL_CSV},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "failed"
+    assert "not found" in (body["error"] or "").lower()
+
+
+def test_put_plan_config_accepts_edit_url(
+    client: TestClient, db_session: AsyncSession
+):
+    import asyncio
+
+    athlete = asyncio.run(_make_athlete(db_session, strava_id=204))
+    edit_url = "https://docs.google.com/spreadsheets/d/abc123/edit?gid=7"
+    response = client.put(
+        "/plan/config",
+        json={"athlete_id": athlete.id, "sheet_url": edit_url},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["sheet_url"] == edit_url  # stored as-is

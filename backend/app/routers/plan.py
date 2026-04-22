@@ -10,6 +10,7 @@ from app.models.athlete import Athlete
 from app.models.training_plan import TrainingPlanEntry
 from app.services.plan_import import (
     SyncReport,
+    import_csv_text,
     is_valid_sheet_url,
     sync_plan,
 )
@@ -32,6 +33,11 @@ class PlanSyncIn(BaseModel):
     athlete_id: int = Field(gt=0)
 
 
+class PlanImportCsvIn(BaseModel):
+    athlete_id: int = Field(gt=0)
+    csv_text: str = Field(min_length=1, max_length=200_000)
+
+
 class PlanEntryOut(BaseModel):
     date: date
     workout_type: str
@@ -49,8 +55,8 @@ async def put_plan_config(
     if not is_valid_sheet_url(data.sheet_url):
         raise HTTPException(
             status_code=400,
-            detail="URL must be a Google Sheets published CSV link "
-            "(https://docs.google.com/spreadsheets/.../pub?output=csv)",
+            detail="URL must be a Google Sheets link: /pub?output=csv, "
+            "/edit, or /export?format=csv",
         )
     athlete = await db.get(Athlete, data.athlete_id)
     if athlete is None:
@@ -85,6 +91,13 @@ async def post_plan_sync(
     data: PlanSyncIn, db: AsyncSession = Depends(get_db)
 ) -> SyncReport:
     return await sync_plan(data.athlete_id, db)
+
+
+@router.post("/import-csv", response_model=SyncReport)
+async def post_plan_import_csv(
+    data: PlanImportCsvIn, db: AsyncSession = Depends(get_db)
+) -> SyncReport:
+    return await import_csv_text(data.athlete_id, data.csv_text, db)
 
 
 @router.get("", response_model=list[PlanEntryOut])
