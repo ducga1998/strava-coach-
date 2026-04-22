@@ -280,3 +280,22 @@ async def test_import_csv_text_rejected_rows_in_report(
     assert report.accepted == 1
     assert len(report.rejected) == 1
     assert report.rejected[0].row_number == 2
+
+
+@pytest.mark.asyncio
+async def test_import_csv_text_header_only_fails(
+    db_session: AsyncSession, athlete_with_sheet: Athlete
+):
+    header_only = (
+        "date,workout_type,planned_tss,planned_duration_min,"
+        "planned_distance_km,planned_elevation_m,description\n"
+    )
+    report = await import_csv_text(
+        athlete_with_sheet.id, header_only, db_session
+    )
+    assert report.status == "failed"
+    assert "no rows" in (report.error or "").lower()
+
+    # plan_synced_at should NOT have been bumped on a failure path
+    await db_session.refresh(athlete_with_sheet)
+    assert athlete_with_sheet.plan_synced_at is None

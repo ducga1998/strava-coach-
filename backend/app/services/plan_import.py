@@ -264,6 +264,9 @@ async def import_csv_text(
     except ValueError as exc:
         return SyncReport(status="failed", error=f"CSV parse error: {exc}")
 
+    if not parsed and not errors:
+        return SyncReport(status="failed", error="CSV contains no rows")
+
     await _upsert_entries(db, athlete_id, parsed)
     athlete.plan_synced_at = datetime.now(timezone.utc)
     await db.commit()
