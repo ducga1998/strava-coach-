@@ -248,6 +248,34 @@ async def sync_plan(athlete_id: int, db: AsyncSession) -> SyncReport:
     )
 
 
+async def import_csv_text(
+    athlete_id: int, csv_text: str, db: AsyncSession
+) -> SyncReport:
+    """Parse a pasted CSV and upsert entries. One-shot — does not store the
+    CSV, does not touch `plan_sheet_url`. Mirrors `sync_plan` minus the
+    HTTP fetch step.
+    """
+    athlete = await db.get(Athlete, athlete_id)
+    if athlete is None:
+        return SyncReport(status="failed", error="athlete not found")
+
+    try:
+        parsed, errors = parse_plan_csv(csv_text)
+    except ValueError as exc:
+        return SyncReport(status="failed", error=f"CSV parse error: {exc}")
+
+    await _upsert_entries(db, athlete_id, parsed)
+    athlete.plan_synced_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return SyncReport(
+        status="ok",
+        fetched_rows=len(parsed) + len(errors),
+        accepted=len(parsed),
+        rejected=[RowError(row_number=e.row_number, reason=e.reason) for e in errors],
+    )
+
+
 async def _upsert_entries(
     db: AsyncSession, athlete_id: int, entries: list[ParsedEntry]
 ) -> None:

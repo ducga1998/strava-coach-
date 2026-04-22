@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.athlete import Athlete
 from app.models.training_plan import TrainingPlanEntry
-from app.services.plan_import import sync_plan
+from app.services.plan_import import import_csv_text, sync_plan
 
 
 @pytest_asyncio.fixture
@@ -167,6 +167,115 @@ async def test_sync_plan_rejected_rows_in_report(
 
     monkeypatch.setattr("app.services.plan_import.fetch_plan_sheet", fake_fetch)
     report = await sync_plan(athlete_with_sheet.id, db_session)
+    assert report.status == "ok"
+    assert report.accepted == 1
+    assert len(report.rejected) == 1
+    assert report.rejected[0].row_number == 2
+
+
+@pytest.mark.asyncio
+async def test_import_csv_text_inserts_entries(
+    db_session: AsyncSession, athlete_with_sheet: Athlete
+):
+    report = await import_csv_text(
+        athlete_with_sheet.id, CSV_BODY_V1, db_session
+    )
+
+    assert report.status == "ok"
+    assert report.accepted == 2
+    assert report.rejected == []
+
+    rows = (
+        await db_session.execute(
+            select(TrainingPlanEntry).where(
+                TrainingPlanEntry.athlete_id == athlete_with_sheet.id
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 2
+
+
+@pytest.mark.asyncio
+async def test_import_csv_text_updates_plan_synced_at(
+    db_session: AsyncSession, athlete_with_sheet: Athlete
+):
+    before = datetime.now(timezone.utc)
+    await import_csv_text(athlete_with_sheet.id, CSV_BODY_V1, db_session)
+    await db_session.refresh(athlete_with_sheet)
+
+    assert athlete_with_sheet.plan_synced_at is not None
+    synced_at = athlete_with_sheet.plan_synced_at
+    if synced_at.tzinfo is None:
+        synced_at = synced_at.replace(tzinfo=timezone.utc)
+    assert synced_at >= before
+
+
+@pytest.mark.asyncio
+async def test_import_csv_text_preserves_plan_sheet_url(
+    db_session: AsyncSession, athlete_with_sheet: Athlete
+):
+    original_url = athlete_with_sheet.plan_sheet_url
+    await import_csv_text(athlete_with_sheet.id, CSV_BODY_V1, db_session)
+    await db_session.refresh(athlete_with_sheet)
+    assert athlete_with_sheet.plan_sheet_url == original_url
+
+
+@pytest.mark.asyncio
+async def test_import_csv_text_unknown_athlete(db_session: AsyncSession):
+    report = await import_csv_text(999_999, CSV_BODY_V1, db_session)
+    assert report.status == "failed"
+    assert "not found" in (report.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_import_csv_text_malformed_header(
+    db_session: AsyncSession, athlete_with_sheet: Athlete
+):
+    bad_csv = "foo,bar\n1,2\n"
+    report = await import_csv_text(
+        athlete_with_sheet.id, bad_csv, db_session
+    )
+    assert report.status == "failed"
+    assert "missing required column" in (report.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_import_csv_text_upserts_like_sync(
+    db_session: AsyncSession, athlete_with_sheet: Athlete
+):
+    await import_csv_text(athlete_with_sheet.id, CSV_BODY_V1, db_session)
+    report = await import_csv_text(
+        athlete_with_sheet.id, CSV_BODY_V2, db_session
+    )
+    assert report.status == "ok"
+    assert report.accepted == 3
+
+    rows = (
+        await db_session.execute(
+            select(TrainingPlanEntry).where(
+                TrainingPlanEntry.athlete_id == athlete_with_sheet.id
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 3  # 2 updated + 1 new — not 5
+    long_row = next(r for r in rows if r.date == date(2026, 4, 22))
+    assert long_row.planned_tss == 200
+    assert "v2" in (long_row.description or "")
+
+
+@pytest.mark.asyncio
+async def test_import_csv_text_rejected_rows_in_report(
+    db_session: AsyncSession, athlete_with_sheet: Athlete
+):
+    csv = (
+        "date,workout_type,planned_tss,planned_duration_min,"
+        "planned_distance_km,planned_elevation_m,description\n"
+        "2026-04-22,fartlek,60,45,7,,\n"  # invalid workout_type
+        "2026-04-23,easy,50,40,6,,\n"
+    )
+    report = await import_csv_text(
+        athlete_with_sheet.id, csv, db_session
+    )
     assert report.status == "ok"
     assert report.accepted == 1
     assert len(report.rejected) == 1
