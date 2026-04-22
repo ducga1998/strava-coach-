@@ -1,12 +1,13 @@
 import { type FormEvent, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
-import { Card, Typography, Button, Input, Select } from "antd"
+import { Card, Typography, Button, Input, Select, Tabs } from "antd"
 import {
   createRaceTarget,
   deleteRaceTarget,
   deletePlanConfig,
   getStoredAthleteId,
+  importCsvText,
   listRaceTargets,
   PLAN_TEMPLATE_SHEET_URL,
   putPlanConfig,
@@ -255,8 +256,10 @@ function TargetListSkeleton() {
 
 function TrainingPlanCard({ athleteId }: { athleteId: number }) {
   const [sheetUrl, setSheetUrl] = useState("")
+  const [csvText, setCsvText] = useState("")
   const [localError, setLocalError] = useState<string | null>(null)
   const [lastReport, setLastReport] = useState<SyncReport | null>(null)
+  const [activeTab, setActiveTab] = useState<"url" | "paste">("url")
 
   const saveConfig = useMutation({
     mutationFn: (url: string) => putPlanConfig({ athleteId, sheetUrl: url }),
@@ -278,36 +281,45 @@ function TrainingPlanCard({ athleteId }: { athleteId: number }) {
     },
   })
 
+  const importPaste = useMutation({
+    mutationFn: () => importCsvText({ athleteId, csvText }),
+    onSuccess: (report) => {
+      setLastReport(report)
+      setLocalError(null)
+    },
+    onError: (err: unknown) =>
+      setLocalError(err instanceof Error ? err.message : "import failed"),
+  })
+
   function onSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!isLikelyValidSheetUrl(sheetUrl)) {
       setLocalError(
-        "URL must be a Google Sheets 'Publish to web → CSV' link.",
+        "URL must be a Google Sheets link ending in /edit, /pub?output=csv, or /export?format=csv.",
       )
       return
     }
     saveConfig.mutate(sheetUrl)
   }
 
-  return (
-    <Card
-      className="rounded-lg shadow-panel border-slate-200"
-      bordered={false}
-    >
-      <Typography.Title level={3} className="!mt-0 !mb-4 font-bold text-slate-950">
-        Training plan
-      </Typography.Title>
+  function onTabChange(next: string) {
+    setActiveTab(next as "url" | "paste")
+    setLocalError(null)
+    setLastReport(null)
+  }
+
+  const urlPane = (
+    <>
       <p className="mb-4 text-sm text-slate-600">
-        Paste your Google Sheet's <em>Publish to the web → CSV</em> URL.
-        The coach's weekly plan shows up on your dashboard and gets compared
-        against every run you log.
+        Paste a Google Sheets share URL (any of <em>/edit</em>, <em>/pub?output=csv</em>,
+        or <em>/export?format=csv</em>). Sync re-fetches when you update the sheet.
       </p>
       <form className="space-y-3" onSubmit={onSave}>
         <TextField
-          label="Google Sheets CSV URL"
+          label="Google Sheets URL"
           value={sheetUrl}
           onChange={setSheetUrl}
-          placeholder="https://docs.google.com/spreadsheets/.../pub?output=csv"
+          placeholder="https://docs.google.com/spreadsheets/d/.../edit?gid=0"
         />
         <div className="flex gap-3">
           <Button
@@ -336,6 +348,57 @@ function TrainingPlanCard({ athleteId }: { athleteId: number }) {
           </Button>
         </div>
       </form>
+    </>
+  )
+
+  const pastePane = (
+    <>
+      <p className="mb-4 text-sm text-slate-600">
+        One-shot import. Copy your sheet contents (headers + rows) and paste here.
+        Nothing is stored server-side beyond the parsed entries.
+      </p>
+      <Input.TextArea
+        rows={12}
+        maxLength={200_000}
+        value={csvText}
+        onChange={(e) => setCsvText(e.target.value)}
+        placeholder={
+          "date,workout_type,planned_tss,planned_duration_min,planned_distance_km,planned_elevation_m,description\n" +
+          "2026-04-22,easy,40,45,8,120,Easy Z2"
+        }
+        className="font-mono text-xs"
+      />
+      <div className="mt-3">
+        <Button
+          type="primary"
+          size="large"
+          loading={importPaste.isPending}
+          disabled={csvText.trim().length === 0}
+          onClick={() => importPaste.mutate()}
+          className="bg-trail-strava font-bold"
+        >
+          Import
+        </Button>
+      </div>
+    </>
+  )
+
+  return (
+    <Card
+      className="rounded-lg shadow-panel border-slate-200"
+      bordered={false}
+    >
+      <Typography.Title level={3} className="!mt-0 !mb-4 font-bold text-slate-950">
+        Training plan
+      </Typography.Title>
+      <Tabs
+        activeKey={activeTab}
+        onChange={onTabChange}
+        items={[
+          { key: "url", label: "Google Sheets URL", children: urlPane },
+          { key: "paste", label: "Paste CSV", children: pastePane },
+        ]}
+      />
       {localError ? (
         <p className="mt-3 text-sm font-medium text-red-600">{localError}</p>
       ) : null}
@@ -387,5 +450,7 @@ function SyncReportView({ report }: { report: SyncReport }) {
 }
 
 function isLikelyValidSheetUrl(url: string): boolean {
-  return /^https:\/\/docs\.google\.com\/spreadsheets\/.+\/pub\?.*output=csv/i.test(url)
+  return /^https:\/\/docs\.google\.com\/spreadsheets\/.+\/(pub\?.*output=csv|edit(?:[?#].*)?|export\?.*format=csv.*)$/i.test(
+    url,
+  )
 }
