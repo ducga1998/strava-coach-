@@ -156,6 +156,29 @@ SHEET_URL_REGEX = re.compile(
     r"(?:pub\?.*output=csv.*|edit(?:[?#].*)?|export\?.*format=csv.*)$",
     re.IGNORECASE,
 )
+
+_EDIT_PATH_RE = re.compile(r"^(?P<base>https://docs\.google\.com/spreadsheets/.+)/edit", re.IGNORECASE)
+_GID_IN_QUERY_RE = re.compile(r"[?&]gid=(\d+)", re.IGNORECASE)
+_GID_IN_FRAGMENT_RE = re.compile(r"#gid=(\d+)", re.IGNORECASE)
+
+
+def _normalize_sheet_url(url: str) -> str:
+    """Convert /edit URLs to /export?format=csv, preserving gid when present.
+
+    Idempotent for /pub and /export URLs. Called at fetch time only — the
+    stored `athlete.plan_sheet_url` is left untouched so users still see the
+    URL shape they pasted.
+    """
+    edit_match = _EDIT_PATH_RE.match(url)
+    if edit_match is None:
+        return url
+    base = edit_match.group("base")
+    gid_match = _GID_IN_QUERY_RE.search(url) or _GID_IN_FRAGMENT_RE.search(url)
+    if gid_match is None:
+        return f"{base}/export?format=csv"
+    return f"{base}/export?format=csv&gid={gid_match.group(1)}"
+
+
 FETCH_TIMEOUT_SEC = 10.0
 
 

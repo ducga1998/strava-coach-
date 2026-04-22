@@ -4,6 +4,7 @@ import pytest
 from app.services.plan_import import (
     InvalidSheetURL,
     SheetFetchError,
+    _normalize_sheet_url,  # NEW
     fetch_plan_sheet,
     is_valid_sheet_url,
 )
@@ -118,3 +119,58 @@ def test_export_format_xlsx_rejected():
 def test_random_docs_path_rejected():
     url = "https://docs.google.com/spreadsheets/d/abc/view"
     assert not is_valid_sheet_url(url)
+
+
+def test_normalize_pub_url_unchanged():
+    url = "https://docs.google.com/spreadsheets/d/abc/pub?output=csv"
+    assert _normalize_sheet_url(url) == url
+
+
+def test_normalize_pub_url_with_gid_unchanged():
+    url = "https://docs.google.com/spreadsheets/d/abc/pub?gid=0&single=true&output=csv"
+    assert _normalize_sheet_url(url) == url
+
+
+def test_normalize_export_url_unchanged():
+    url = "https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=5"
+    assert _normalize_sheet_url(url) == url
+
+
+def test_normalize_edit_url_no_gid_to_export():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit"
+    assert (
+        _normalize_sheet_url(url)
+        == "https://docs.google.com/spreadsheets/d/abc/export?format=csv"
+    )
+
+
+def test_normalize_edit_url_with_query_gid_to_export():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit?gid=123"
+    assert (
+        _normalize_sheet_url(url)
+        == "https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=123"
+    )
+
+
+def test_normalize_edit_url_with_fragment_gid_to_export():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit#gid=123"
+    assert (
+        _normalize_sheet_url(url)
+        == "https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=123"
+    )
+
+
+def test_normalize_edit_url_with_usp_sharing_to_export():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit?usp=sharing"
+    assert (
+        _normalize_sheet_url(url)
+        == "https://docs.google.com/spreadsheets/d/abc/export?format=csv"
+    )
+
+
+def test_normalize_edit_url_with_both_usp_and_gid():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit?usp=sharing&gid=42"
+    assert (
+        _normalize_sheet_url(url)
+        == "https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=42"
+    )
