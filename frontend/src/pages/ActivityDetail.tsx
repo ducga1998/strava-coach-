@@ -85,6 +85,7 @@ function BackLink() {
 }
 
 function ActivityHeader({ data, activityId }: { data: ActivityDetailResponse; activityId: number }) {
+  const athleteId = getStoredAthleteId()
   return (
     <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-panel">
       <div className="flex items-start justify-between gap-4">
@@ -95,7 +96,9 @@ function ActivityHeader({ data, activityId }: { data: ActivityDetailResponse; ac
             {formatDate(data.activity.start_date)} · {formatKm(data.activity.distance_m)} · {formatDuration(data.activity.elapsed_time_sec)}
           </p>
         </div>
-        <PushDescriptionButton activityId={activityId} hasDebrief={data.debrief !== null} />
+        {athleteId !== null ? (
+          <PushDescriptionButton activityId={activityId} hasDebrief={data.debrief !== null} />
+        ) : null}
       </div>
     </header>
   )
