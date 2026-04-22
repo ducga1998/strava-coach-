@@ -50,6 +50,8 @@ export interface DashboardLoadResponse {
   warning?: string | null
 }
 
+export type EffortLabel = "easy" | "tempo" | "hard"
+
 export interface ActivityListItem {
   id: number
   strava_activity_id: number
@@ -60,6 +62,8 @@ export interface ActivityListItem {
   elapsed_time_sec: number
   total_elevation_gain_m?: number | null
   processing_status: ProcessingStatus
+  hr_tss: number | null
+  effort: EffortLabel | null
 }
 
 export interface ActivityMetrics {

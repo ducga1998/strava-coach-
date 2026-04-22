@@ -21,6 +21,7 @@ import type {
   ActivityListItem,
   AthleteInfo,
   DashboardLoadResponse,
+  EffortLabel,
   LoadSnapshot,
   PlanEntry,
 } from "../types"
@@ -239,20 +240,61 @@ function RecentActivities(props: { activities: ActivityListItem[]; athleteId: nu
 
 function ActivityRow(props: { activity: ActivityListItem; athleteId: number }) {
   const activity = props.activity
+  const elevation = activity.total_elevation_gain_m ?? 0
   return (
     <Link
-      className="flex flex-col gap-2 py-4 transition hover:bg-white/5 md:flex-row md:items-center md:justify-between"
+      className="block py-4 transition hover:bg-white/5"
       to={`/activities/${activity.id}?athlete_id=${props.athleteId}`}
     >
-      <span>
-        <span className="block font-semibold text-neutral-50">{activity.name}</span>
-        <span className="text-sm text-brand-muted">
-          {activity.sport_type} · {formatKm(activity.distance_m)} · {formatMinutes(activity.elapsed_time_sec)}
-        </span>
-      </span>
-      <span className={statusClass(activity.processing_status)}>{activity.processing_status}</span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm text-brand-muted">
+            <span className="font-mono uppercase tracking-wider">{formatShortDate(activity.start_date)}</span>
+            <span className="px-1.5 text-brand-muted/50">·</span>
+            <span className="font-semibold text-neutral-50">{activity.name}</span>
+            <span className="px-1.5 text-brand-muted/50">·</span>
+            <span>{activity.sport_type}</span>
+          </p>
+          <p className="mt-1 text-sm text-brand-muted">
+            {formatKm(activity.distance_m)}
+            <span className="px-1.5 text-brand-muted/50">·</span>
+            {Math.round(elevation)} m D+
+            <span className="px-1.5 text-brand-muted/50">·</span>
+            {formatDuration(activity.elapsed_time_sec)}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            {activity.effort ? <EffortBadge effort={activity.effort} /> : null}
+            {activity.hr_tss !== null ? (
+              <span className="rounded-md bg-white/5 px-2 py-0.5 font-mono text-xs font-semibold text-neutral-200">
+                {Math.round(activity.hr_tss)} TSS
+              </span>
+            ) : null}
+          </div>
+          <span className={mutedStatusClass(activity.processing_status)}>
+            {activity.processing_status}
+          </span>
+        </div>
+      </div>
     </Link>
   )
+}
+
+function EffortBadge({ effort }: { effort: EffortLabel }) {
+  const classes = effortClasses(effort)
+  const label = effort === "easy" ? "Easy" : effort === "tempo" ? "Tempo" : "Hard"
+  return (
+    <span className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${classes}`}>
+      {label}
+    </span>
+  )
+}
+
+function effortClasses(effort: EffortLabel): string {
+  if (effort === "hard") return "bg-red-500/20 text-red-300"
+  if (effort === "tempo") return "bg-amber-500/20 text-amber-300"
+  return "bg-emerald-500/20 text-emerald-300"
 }
 
 function AcwrBanner(props: {
@@ -393,10 +435,20 @@ function EmptyActivities() {
   return <p className="py-6 text-sm text-brand-muted">No processed activities yet.</p>
 }
 
-function statusClass(status: ActivityListItem["processing_status"]): string {
-  if (status === "done") return "rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300"
-  if (status === "failed") return "rounded-full bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300"
-  return "rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-brand-muted"
+function mutedStatusClass(status: ActivityListItem["processing_status"]): string {
+  if (status === "done") return "text-[10px] font-mono uppercase tracking-wider text-emerald-400/70"
+  if (status === "failed") return "text-[10px] font-mono uppercase tracking-wider text-red-400/80"
+  return "text-[10px] font-mono uppercase tracking-wider text-brand-muted/70"
+}
+
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" })
+}
+
+function formatDuration(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.round((seconds % 3600) / 60)
+  return hours > 0 ? `${hours}h ${String(minutes).padStart(2, "0")}m` : `${minutes} min`
 }
 
 function formatVolume(volume?: DashboardLoadResponse["weekly_volume"]): string {
@@ -409,10 +461,6 @@ function formatElevation(volume?: DashboardLoadResponse["weekly_volume"]): strin
 
 function formatKm(meters: number): string {
   return `${(meters / 1000).toFixed(1)} km`
-}
-
-function formatMinutes(seconds: number): string {
-  return `${Math.round(seconds / 60)} min`
 }
 
 function toIso(d: Date): string {
