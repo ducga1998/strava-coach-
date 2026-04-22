@@ -7,10 +7,12 @@ import type {
   ActivityDetailResponse,
   ActivityListItem,
   AthleteInfo,
+  AthleteProfileInfo,
   DashboardLoadResponse,
   ExistingFeedbackResponse,
   FeedbackCreateRequest,
   FeedbackItem,
+  LanguageCode,
   OnboardingProfilePayload,
   PlanConfig,
   PlanEntry,
@@ -70,6 +72,13 @@ export function requireAthleteId(athleteId: number | null): number {
 
 export async function getAthleteInfo(athleteId: number): Promise<AthleteInfo> {
   return request(api.get(`/athletes/${athleteId}`))
+}
+
+export async function updateAthleteLanguage(
+  athleteId: number,
+  language: LanguageCode,
+): Promise<AthleteProfileInfo> {
+  return request(api.patch(`/athletes/${athleteId}/language`, { language }))
 }
 
 export async function getDashboardLoad(

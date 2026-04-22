@@ -292,6 +292,7 @@ async def _build_athlete_context(
             athlete_id, activity_date + timedelta(days=1), session
         )
 
+    language = profile.language if profile and profile.language in ("en", "vi") else "en"
     return AthleteContext(
         lthr=profile.lthr if profile and profile.lthr else 155,
         threshold_pace_sec_km=_threshold_pace(profile),
@@ -304,6 +305,7 @@ async def _build_athlete_context(
         race_target=_race_target_context(target) if target else None,
         planned_today=planned_today,
         planned_tomorrow=planned_tomorrow,
+        language=language,
     )
 
 

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom"
 import { getStoredAthleteId } from "../../api/client"
+import LanguagePicker from "./LanguagePicker"
 
 export default function AppChromeHeader() {
   const athleteId = getStoredAthleteId()
@@ -18,6 +19,7 @@ export default function AppChromeHeader() {
               Dashboard
             </Link>
           ) : null}
+          <LanguagePicker />
           <Link
             className="rounded-full border border-brand-teal/35 bg-brand-teal/10 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-brand-teal transition hover:border-brand-teal/60 hover:bg-brand-teal/20 md:px-4 md:text-xs"
             to="/connect"

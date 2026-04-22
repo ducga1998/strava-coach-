@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -48,6 +49,7 @@ class AthleteContext(BaseModel):
     race_target: RaceTargetContext | None = None
     planned_today: PlannedWorkoutContext | None = None
     planned_tomorrow: PlannedWorkoutContext | None = None
+    language: Literal["en", "vi"] = "en"
 
 
 class DebriefOutput(BaseModel):
