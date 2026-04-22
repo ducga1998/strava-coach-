@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -16,6 +18,11 @@ class AthleteProfileOut(BaseModel):
     threshold_pace_sec_km: int | None
     weight_kg: float | None
     vo2max_estimate: float | None
+    language: Literal["en", "vi"]
+
+
+class LanguageUpdate(BaseModel):
+    language: Literal["en", "vi"]
 
 
 class AthleteOut(BaseModel):
@@ -60,6 +67,7 @@ async def _find_profile(db: AsyncSession, athlete_id: int) -> AthleteProfile | N
 def _profile_out(profile: AthleteProfile | None) -> AthleteProfileOut | None:
     if profile is None:
         return None
+    language = profile.language if profile.language in ("en", "vi") else "en"
     return AthleteProfileOut(
         onboarding_complete=profile.onboarding_complete,
         lthr=profile.lthr,
@@ -67,4 +75,28 @@ def _profile_out(profile: AthleteProfile | None) -> AthleteProfileOut | None:
         threshold_pace_sec_km=profile.threshold_pace_sec_km,
         weight_kg=profile.weight_kg,
         vo2max_estimate=profile.vo2max_estimate,
+        language=language,
     )
+
+
+@router.patch("/{athlete_id}/language", response_model=AthleteProfileOut)
+async def update_language(
+    athlete_id: int,
+    payload: LanguageUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> AthleteProfileOut:
+    athlete = await db.execute(select(Athlete).where(Athlete.id == athlete_id))
+    if athlete.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    profile = await _find_profile(db, athlete_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found — complete onboarding first")
+
+    profile.language = payload.language
+    await db.commit()
+    await db.refresh(profile)
+
+    result = _profile_out(profile)
+    assert result is not None  # just refreshed
+    return result

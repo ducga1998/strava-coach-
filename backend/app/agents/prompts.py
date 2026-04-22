@@ -108,6 +108,17 @@ Return exactly 5 fields via the submit_debrief tool:
 """
 
 
+LANGUAGE_INSTRUCTION_VI = (
+    "=== LANGUAGE ===\n"
+    "Respond entirely in Vietnamese. All narrative fields (load_verdict, "
+    "technical_insight, next_session_action, nutrition_protocol, "
+    "vmm_projection, plan_compliance) must be natural Vietnamese prose. "
+    "Keep metric names, numbers, and units (hrTSS, ACWR, TSB, CTL, ATL, "
+    "bpm, km, min/km, %, spm) unchanged — do not translate them. "
+    "The '<score>/100 ' prefix on plan_compliance stays as digits."
+)
+
+
 def build_debrief_prompt(activity: dict, context: dict) -> str:
     dur_min = activity["duration_sec"] // 60
     dist_km = activity["distance_m"] / 1000
@@ -175,6 +186,10 @@ def build_debrief_prompt(activity: dict, context: dict) -> str:
         "",
         "Diagnose this session. Be specific with numbers. Output via submit_debrief tool.",
     ]
+
+    if context.get("language") == "vi":
+        lines += ["", LANGUAGE_INSTRUCTION_VI]
+
     return "\n".join(lines)
 
 

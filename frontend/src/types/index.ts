@@ -139,6 +139,7 @@ export interface AthleteProfileInfo {
   threshold_pace_sec_km: number | null
   weight_kg: number | null
   vo2max_estimate: number | null
+  language: LanguageCode
 }
 
 export interface PushDescriptionResponse {
