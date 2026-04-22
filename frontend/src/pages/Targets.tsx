@@ -358,6 +358,7 @@ function TrainingPlanCard({ athleteId }: { athleteId: number }) {
         Nothing is stored server-side beyond the parsed entries.
       </p>
       <Input.TextArea
+        aria-label="Paste CSV contents"
         rows={12}
         maxLength={200_000}
         value={csvText}
