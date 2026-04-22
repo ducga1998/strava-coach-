@@ -175,6 +175,18 @@ export async function syncPlan(athleteId: number): Promise<SyncReport> {
   return request(api.post("/plan/sync", { athlete_id: athleteId }))
 }
 
+export async function importCsvText(params: {
+  athleteId: number
+  csvText: string
+}): Promise<SyncReport> {
+  return request(
+    api.post("/plan/import-csv", {
+      athlete_id: params.athleteId,
+      csv_text: params.csvText,
+    }),
+  )
+}
+
 export async function getPlanRange(params: {
   athleteId: number
   from: string   // YYYY-MM-DD
