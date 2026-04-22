@@ -152,7 +152,8 @@ def _parse_optional_int(raw: str, field_name: str) -> int | None:
 
 
 SHEET_URL_REGEX = re.compile(
-    r"^https://docs\.google\.com/spreadsheets/.+/pub\?.*output=csv.*$",
+    r"^https://docs\.google\.com/spreadsheets/.+/"
+    r"(?:pub\?.*output=csv.*|edit(?:[?#].*)?|export\?.*format=csv.*)$",
     re.IGNORECASE,
 )
 FETCH_TIMEOUT_SEC = 10.0

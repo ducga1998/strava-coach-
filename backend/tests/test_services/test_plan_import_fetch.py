@@ -78,3 +78,43 @@ async def test_fetch_raises_on_timeout():
     url = "https://docs.google.com/spreadsheets/d/abc/pub?output=csv"
     with pytest.raises(SheetFetchError, match="timeout"):
         await fetch_plan_sheet(url, transport=transport)
+
+
+def test_edit_url_with_gid_query_accepted():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit?gid=123"
+    assert is_valid_sheet_url(url)
+
+
+def test_edit_url_with_gid_fragment_accepted():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit#gid=123"
+    assert is_valid_sheet_url(url)
+
+
+def test_edit_url_without_gid_accepted():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit"
+    assert is_valid_sheet_url(url)
+
+
+def test_edit_url_with_usp_share_accepted():
+    url = "https://docs.google.com/spreadsheets/d/abc/edit?usp=sharing"
+    assert is_valid_sheet_url(url)
+
+
+def test_export_format_csv_accepted():
+    url = "https://docs.google.com/spreadsheets/d/abc/export?format=csv"
+    assert is_valid_sheet_url(url)
+
+
+def test_export_format_csv_with_gid_accepted():
+    url = "https://docs.google.com/spreadsheets/d/abc/export?format=csv&gid=456"
+    assert is_valid_sheet_url(url)
+
+
+def test_export_format_xlsx_rejected():
+    url = "https://docs.google.com/spreadsheets/d/abc/export?format=xlsx"
+    assert not is_valid_sheet_url(url)
+
+
+def test_random_docs_path_rejected():
+    url = "https://docs.google.com/spreadsheets/d/abc/view"
+    assert not is_valid_sheet_url(url)
