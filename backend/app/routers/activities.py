@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,8 @@ from app.services.token_service import get_token_service
 
 router = APIRouter(prefix="/activities", tags=["activities"])
 
+EffortLabel = Literal["easy", "tempo", "hard"]
+
 
 class ActivityListOut(BaseModel):
     id: int
@@ -25,6 +28,8 @@ class ActivityListOut(BaseModel):
     elapsed_time_sec: int
     total_elevation_gain_m: float | None
     processing_status: str
+    hr_tss: float | None = None
+    effort: EffortLabel | None = None
 
 
 class MetricsOut(BaseModel):
@@ -65,13 +70,15 @@ class ActivityResponse(BaseModel):
 async def list_activities(
     athlete_id: int, db: AsyncSession = Depends(get_db)
 ) -> list[ActivityListOut]:
-    result = await db.execute(
-        select(Activity)
+    stmt = (
+        select(Activity, ActivityMetrics)
+        .outerjoin(ActivityMetrics, ActivityMetrics.activity_id == Activity.id)
         .where(Activity.athlete_id == athlete_id)
         .order_by(Activity.start_date.desc())
         .limit(50)
     )
-    return [activity_list_out(activity) for activity in result.scalars().all()]
+    result = await db.execute(stmt)
+    return [activity_list_out(activity, metrics) for activity, metrics in result.all()]
 
 
 @router.post("/{activity_id}/push-description")
@@ -119,7 +126,9 @@ async def find_metrics(
     return result.scalar_one_or_none()
 
 
-def activity_list_out(activity: Activity) -> ActivityListOut:
+def activity_list_out(
+    activity: Activity, metrics: ActivityMetrics | None = None
+) -> ActivityListOut:
     return ActivityListOut(
         id=activity.id,
         strava_activity_id=activity.strava_activity_id,
@@ -130,12 +139,36 @@ def activity_list_out(activity: Activity) -> ActivityListOut:
         elapsed_time_sec=activity.elapsed_time_sec or 0,
         total_elevation_gain_m=activity.total_elevation_gain_m,
         processing_status=activity.processing_status,
+        hr_tss=metrics.hr_tss if metrics else None,
+        effort=classify_effort(metrics.zone_distribution) if metrics else None,
     )
 
 
 def activity_detail_out(activity: Activity) -> ActivityDetailOut:
     listed = activity_list_out(activity)
-    return ActivityDetailOut(**listed.model_dump(exclude={"strava_activity_id", "processing_status"}))
+    return ActivityDetailOut(
+        **listed.model_dump(
+            exclude={"strava_activity_id", "processing_status", "hr_tss", "effort"}
+        )
+    )
+
+
+def classify_effort(
+    zones: dict[str, float] | None,
+) -> EffortLabel | None:
+    """Classify session intensity from zone distribution.
+
+    ≥20% in Z4+Z5 → hard; ≥20% in Z3 → tempo; else → easy.
+    Returns None when zone data is missing so the UI can hide the badge.
+    """
+    if not zones:
+        return None
+    hard = zones.get("z4_pct", 0.0) + zones.get("z5_pct", 0.0)
+    if hard >= 20.0:
+        return "hard"
+    if zones.get("z3_pct", 0.0) >= 20.0:
+        return "tempo"
+    return "easy"
 
 
 def metrics_out(metrics: ActivityMetrics | None) -> MetricsOut | None:
