@@ -52,12 +52,14 @@ const browser = await chromium.launch()
 const ctx = await browser.newContext({ deviceScaleFactor: 1 })
 const page = await ctx.newPage()
 
-for (const { name, size, padPct } of SPECS) {
-  await page.setViewportSize({ width: size, height: size })
-  await page.setContent(html(size, padPct), { waitUntil: "load" })
-  const out = resolve(PUBLIC_DIR, name)
-  await page.locator(".box").screenshot({ path: out, omitBackground: false })
-  console.log(`wrote ${out}`)
+try {
+  for (const { name, size, padPct } of SPECS) {
+    await page.setViewportSize({ width: size, height: size })
+    await page.setContent(html(size, padPct), { waitUntil: "load" })
+    const out = resolve(PUBLIC_DIR, name)
+    await page.locator(".box").screenshot({ path: out, omitBackground: false })
+    console.log(`wrote ${out}`)
+  }
+} finally {
+  await browser.close()
 }
-
-await browser.close()
