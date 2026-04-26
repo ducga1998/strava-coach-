@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: "autoUpdate",
         injectRegister: "auto",
-        includeAssets: ["apple-touch-icon.png", "icon-192.png", "icon-512.png"],
+        includeAssets: ["apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-512-maskable.png"],
         manifest: {
           name: "Strava AI Coach",
           short_name: "Coach",
