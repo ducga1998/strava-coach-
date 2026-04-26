@@ -2,6 +2,7 @@ import react from "@vitejs/plugin-react"
 import { writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { defineConfig, loadEnv } from "vite"
+import { VitePWA } from "vite-plugin-pwa"
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "")
@@ -9,6 +10,32 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      VitePWA({
+        registerType: "autoUpdate",
+        injectRegister: "auto",
+        includeAssets: ["apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-512-maskable.png"],
+        manifest: {
+          name: "Strava AI Coach",
+          short_name: "Coach",
+          description: "AI debriefs and training load for trail/ultra runners",
+          start_url: "/",
+          scope: "/",
+          display: "standalone",
+          background_color: "#050505",
+          theme_color: "#050505",
+          orientation: "portrait",
+          icons: [
+            { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+            { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+            { src: "/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          ],
+        },
+        workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
+          // Default globPatterns precaches JS/CSS/HTML/SVG/PNG/ICO/woff2 — sufficient for this app.
+        },
+      }),
       react(),
       {
         name: "emit-sitemap-robots",
